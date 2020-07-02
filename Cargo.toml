@@ -1,0 +1,21 @@
+[package]
+name = "five_os"
+version = "0.1.0"
+authors = ["Daniel Boyle <boylede+github@gmail.com>"]
+readme = "readme.md"
+edition = "2018"
+
+[dependencies]
+
+[[bin]]
+name = "five_os"
+test = false
+bench = false
+
+[profile.release]
+codegen-units = 1
+debug = false
+lto = true
+
+[build-dependencies]
+cc = "1.0.46"
