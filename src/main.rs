@@ -17,7 +17,7 @@ extern "C" fn eh_personality() {}
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    print!("aborting: {}", info);
+    println!("aborting: {}", info);
     abort();
 }
 
