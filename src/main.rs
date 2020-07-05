@@ -2,14 +2,14 @@
 #![no_main]
 
 mod console;
+mod cpu_status;
 mod uart;
 
 #[no_mangle]
 extern "C" fn kmain() {
     println!("Entered Rust Kernel");
-    let mut console = console::Console::new();
-    console.run();
-    panic!("Finished");
+    cpu_status::print_misa_info();
+    abort();
 }
 
 #[no_mangle]

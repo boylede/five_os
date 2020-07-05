@@ -7,6 +7,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("cargo:rustc-link-search=linker/");
     let assembly_files = vec!["boot.s", "trap.s"];
+    let assembly_files = vec![
+        "boot.s",
+        "trap.s",
+        "cpu.s",
+        ];
 
     let mut builder = Build::new();
     for file in assembly_files.iter() {
