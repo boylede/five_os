@@ -8,6 +8,7 @@ mod uart;
 
 #[no_mangle]
 extern "C" fn kmain() {
+    cpu_status::setup_trap();
     cpu_status::inspect_trap_vector();
     cpu_status::print_misa_info();
     abort();

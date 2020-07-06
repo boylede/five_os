@@ -2,6 +2,7 @@ extern "C" {
     fn asm_get_misa() -> usize;
     static asm_trap_vector: usize;
     fn asm_get_mtvec() -> usize;
+    fn asm_set_mtvec(_: usize);
     fn asm_get_satp() -> usize;
 }
 
@@ -17,11 +18,9 @@ pub struct Misa {
 const EXTENSION_NAMES: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 pub fn print_misa_info() {
-    println!("entering asm again");
     let misa = unsafe { asm_get_misa() };
 
     // todo: bug here? gives csr_mtvec error if removed.
-    println!("back from asm");
 
     let xlen = {
         let mut misa: i64 = misa as i64;
@@ -70,27 +69,31 @@ fn get_base_width() -> u64 {
     return 128;
 }
 
+fn set_trap_vector(address: usize) {
+    // todo: perform sanity checks
+    unsafe { asm_set_mtvec(address) };
+}
+
+pub fn setup_trap() {
+    let mut address = unsafe { asm_trap_vector };
+    print!("setting trap: {:x}", address);
+    let address_alignment = 4 - 1;
+    address += address_alignment;
+    address = address & !address_alignment;
+    println!(" -> {:x}", address);
+    set_trap_vector(address);
+}
+
 pub fn inspect_trap_vector() {
-    println!("trap vector: {:x}", unsafe { asm_trap_vector });
-    match unsafe { asm_trap_vector } & 0b11 {
-        0b00 => println!("trap vector set correctly"),
-        0b01 => println!("trap vector set incorrectly, contains vectored MODE"),
-        0b10 => println!("trap vector contains reserved value 2"),
-        0b11 => println!("trap vector contains reserved value 3"),
-        _ => unreachable!(),
-    };
-    let mtv = unsafe { asm_get_mtvec() };
-    if mtv != unsafe { asm_trap_vector } {
-        print!("mtvec has unexpected value: ");
-    }
-    match unsafe { asm_trap_vector } & 0b11 {
+    let mtvec = unsafe { asm_get_mtvec() };
+    println!("trap vector: {:x}", mtvec);
+    match mtvec & 0b11 {
         0b00 => println!("Direct Mode"),
         0b01 => println!("Vectored Mode"),
         0b10 => println!("Reserved Value 2 Set"),
         0b11 => println!("Reserved Value 3 Set"),
         _ => unreachable!(),
     };
-    println!("mtvec: {:x}", mtv);
 }
 
 pub struct Satp(usize);

@@ -40,9 +40,6 @@ _start:
     la      t1, kmain
     csrw    mepc, t1
 
-    la      t2, asm_trap_vector
-    csrw    mtvec, t2
-
     li      t3, (1 << 3) | (1 << 7) | (1 << 11)
     csrw    mie, t3
     la      ra, 4f
