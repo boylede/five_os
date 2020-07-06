@@ -1,3 +1,5 @@
+use crate::{print, println};
+
 extern "C" {
     static HEAP_START: usize;
     static HEAP_SIZE: usize;
@@ -14,7 +16,7 @@ const PAGE_ADDR_MASK: usize = PAGE_SIZE - 1;
 /// Produces a page-aligned address by adding one
 /// less than the page size (4095), then masking low bits
 /// to decrease the address back to the nearest page boundary
-const fn align_address(address: usize) -> usize {
+pub const fn align_address(address: usize) -> usize {
     (address + PAGE_ADDR_MASK) & !PAGE_ADDR_MASK
 }
 
@@ -44,18 +46,8 @@ impl PageFlags {
     }
 }
 
-pub struct Page {
-    flags: PageFlags,
-}
+pub struct Page([u8; 4096]);
 
-impl Page {
-    pub fn free(&self) -> bool {
-        self.flags.free()
-    }
-    pub fn taken(&self) -> bool {
-        self.flags.taken()
-    }
-}
 
 trait PageTable {}
 
@@ -213,7 +205,7 @@ impl Sv39Entry {
     }
 }
 
-struct Sv39Table([Sv39Entry; 512]);
+pub struct Sv39Table([Sv39Entry; 512]);
 
 impl PageTable for Sv39Table {
     //
@@ -236,9 +228,44 @@ impl Sv39Address {
 
 pub fn alloc(count: usize) -> *mut u8 {
     assert!(count > 0);
+    unimplemented!()
+}
+
+pub fn dealloc(page: *mut u8) {
+    assert!(!page.is_null());
+    //
+    unimplemented!()
+}
+
+pub fn zalloc(count: usize) -> *mut u8 {
+    unimplemented!()
+}
+
+pub fn print_page_table(table: &Sv39Table) {
     let total_page_count = unsafe { HEAP_SIZE } / PAGE_SIZE;
-    let current = unsafe { HEAP_START } as *mut Page;
-    for page in 0..total_page_count - count {
-        let mut found = false;
-        if unsafe { current.add(page).as_ref() }.unwrap().free() {
-            found = true;
+    let mut begining = unsafe { HEAP_START } as *const Page;
+    let end = unsafe { begining.add(total_page_count) };
+    let allocation_beginning = unsafe { ALLOC_START };
+    let allocation_end = allocation_beginning + total_page_count * PAGE_SIZE;
+
+    println!();
+    println!("Page Allocation Table");
+    println!("Meta: {:p} - {:p}", begining, end);
+    println!("Phys: {:#04x} - {:#04x}", allocation_beginning, allocation_end);
+    println!("----------------------------------------");
+
+}
+
+pub fn setup() -> *const Sv39Table {
+    println!("heap_start is {:x}", unsafe {HEAP_START});
+    let mut satp = crate::cpu_status::Satp::from_address(unsafe { HEAP_START });
+    println!("resulting address is {:x}", crate::page::align_address(unsafe {HEAP_START}));
+    satp.set_mode(8);
+    println!("setting satp to {:x}", satp.raw());
+    crate::cpu_status::set_satp(&satp);
+    let satp = crate::cpu_status::get_satp();
+    println!("satp is {:x}", satp.raw());
+    unimplemented!()
+}
+
+
