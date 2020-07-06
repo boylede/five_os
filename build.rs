@@ -9,6 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let assembly_files = vec![
         "boot.s",
         "trap.s",
+        "mem.s",
         "cpu.s",
         ];
 
