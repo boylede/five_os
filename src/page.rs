@@ -48,7 +48,6 @@ impl PageFlags {
 
 pub struct Page([u8; 4096]);
 
-
 trait PageTable {}
 
 trait PageEntry {}
@@ -57,6 +56,9 @@ trait PageEntry {}
 struct Sv32Table([Sv32Entry; 1024]);
 
 impl Sv32Table {
+    pub fn at_address(address: usize) -> *mut Sv32Table {
+        unimplemented!()
+    }
     pub fn translate(&self, address: Sv32Address) -> usize {
         // double check that we are the recognized page table
         let a = crate::cpu_status::get_satp().ppn() << 12;
@@ -158,6 +160,9 @@ impl Sv39Entry {
     pub fn valid(&self) -> bool {
         self.0 & 0b1 == 1
     }
+    pub fn set_valid(&mut self) {
+        self.0 = self.0 | 0b1
+    }
     pub fn leaf(&self) -> bool {
         self.0 & 0b1110 != 0
     }
@@ -207,6 +212,31 @@ impl Sv39Entry {
 
 pub struct Sv39Table([Sv39Entry; 512]);
 
+impl Sv39Table {
+    pub fn at_address(address: usize) -> *mut Sv39Table {
+        let address = address as *mut u8;
+        for i in 0..PAGE_SIZE {
+            unsafe { *(address.add(i)) = 0};
+        }
+        address as *mut Sv39Table
+    }
+    pub fn alloc(&mut self, count: usize) {
+        let mut found = false;
+        for i in 0..512 {
+            if !self.0[i].valid() {
+                found = true;
+                for j in i..i + count - 1 {
+                    if self.0[i].valid() {
+                        found = false;
+                        break;
+                    }
+                }
+            }
+        }
+        unimplemented!()
+    }
+}
+
 impl PageTable for Sv39Table {
     //
 }
@@ -233,7 +263,6 @@ pub fn alloc(count: usize) -> *mut u8 {
 
 pub fn dealloc(page: *mut u8) {
     assert!(!page.is_null());
-    //
     unimplemented!()
 }
 
@@ -256,16 +285,14 @@ pub fn print_page_table(table: &Sv39Table) {
 
 }
 
-pub fn setup() -> *const Sv39Table {
+pub fn setup() -> *mut Sv39Table {
     println!("heap_start is {:x}", unsafe {HEAP_START});
     let mut satp = crate::cpu_status::Satp::from_address(unsafe { HEAP_START });
     println!("resulting address is {:x}", crate::page::align_address(unsafe {HEAP_START}));
     satp.set_mode(8);
-    println!("setting satp to {:x}", satp.raw());
     crate::cpu_status::set_satp(&satp);
-    let satp = crate::cpu_status::get_satp();
-    println!("satp is {:x}", satp.raw());
-    unimplemented!()
+    let table = Sv39Table::at_address(satp.address());
+    table
 }
 
 
