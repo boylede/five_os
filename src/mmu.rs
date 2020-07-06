@@ -20,31 +20,8 @@ pub const fn align_address(address: usize) -> usize {
     (address + PAGE_ADDR_MASK) & !PAGE_ADDR_MASK
 }
 
-#[repr(u8)]
-#[derive(PartialEq, Eq, Copy, Clone)]
-enum PageFlagBits {
-    Empty = 0b00,
-    Taken = 0b01,
-    Last = 0b10,
-    LastTaken = 0b11,
-}
 
-#[derive(PartialEq, Eq, Copy, Clone)]
-struct PageFlags(u8);
 
-impl PageFlags {
-    fn taken(&self) -> bool {
-        let test = PageFlagBits::Taken as u8;
-        self.0 & test == test
-    }
-    fn last(&self) -> bool {
-        let test = PageFlagBits::Last as u8;
-        self.0 & test == test
-    }
-    fn free(&self) -> bool {
-        !self.taken()
-    }
-}
 
 pub struct Page([u8; 4096]);
 
@@ -254,20 +231,6 @@ impl Sv39Address {
     pub fn page_number(&self) -> u64 {
         self.0 >> 12
     }
-}
-
-pub fn alloc(count: usize) -> *mut u8 {
-    assert!(count > 0);
-    unimplemented!()
-}
-
-pub fn dealloc(page: *mut u8) {
-    assert!(!page.is_null());
-    unimplemented!()
-}
-
-pub fn zalloc(count: usize) -> *mut u8 {
-    unimplemented!()
 }
 
 pub fn print_page_table(table: &Sv39Table) {
