@@ -19,3 +19,9 @@ asm_set_mtvec:
 asm_get_satp:
     csrr   a0, satp
     ret
+
+.global asm_set_satp
+asm_set_satp:
+    csrw   satp, a0
+    ret
+    

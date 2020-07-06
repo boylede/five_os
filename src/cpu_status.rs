@@ -97,6 +97,7 @@ pub fn inspect_trap_vector() {
     };
 }
 
+#[derive(Clone, Copy)]
 pub struct Satp(usize);
 
 impl Satp {
