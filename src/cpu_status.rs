@@ -4,6 +4,7 @@ extern "C" {
     fn asm_get_mtvec() -> usize;
     fn asm_set_mtvec(_: usize);
     fn asm_get_satp() -> usize;
+    fn asm_set_satp(_:usize);
 }
 
 #[macro_use]
@@ -99,6 +100,11 @@ pub fn inspect_trap_vector() {
 pub struct Satp(usize);
 
 impl Satp {
+    pub fn from_address(address: usize) -> Self {
+        let address = crate::page::align_address(address);
+        let satp = address >> 12;
+        Satp(satp)
+    }
     pub fn mode(&self) -> u8 {
         unimplemented!()
     }
@@ -112,9 +118,33 @@ impl Satp {
             _ => unimplemented!(),
         }
     }
+    pub fn set_mode(&mut self, value: u8) {
+        match get_base_width() {
+            32 => (
+                unimplemented!()
+            ),
+            64 => {
+                let mut mode: usize = (value & ( 1 << 4) - 1) as usize;
+                mode = mode << 60;
+                self.0 = self.0 & (1 << 60) - 1;
+                self.0 = self.0 | mode;
+            },
+            _ => unimplemented!(),
+        }
+    }
+    pub fn set_asid(&mut self, value: u16) {
+        unimplemented!()
+    }
+    pub fn raw(self) -> usize {
+        self.0
+    }
 }
 
 pub fn get_satp() -> Satp {
     let satp = unsafe { asm_get_satp() };
     Satp(satp)
+}
+
+pub fn set_satp(satp: &Satp) {
+    unsafe {asm_set_satp(satp.raw())}
 }
