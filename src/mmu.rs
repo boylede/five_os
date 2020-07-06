@@ -288,7 +288,7 @@ pub fn print_page_table(table: &Sv39Table) {
 pub fn setup() -> *mut Sv39Table {
     println!("heap_start is {:x}", unsafe {HEAP_START});
     let mut satp = crate::cpu_status::Satp::from_address(unsafe { HEAP_START });
-    println!("resulting address is {:x}", crate::page::align_address(unsafe {HEAP_START}));
+    println!("resulting address is {:x}", align_address(unsafe {HEAP_START}));
     satp.set_mode(8);
     crate::cpu_status::set_satp(&satp);
     let table = Sv39Table::at_address(satp.address());

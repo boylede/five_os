@@ -102,7 +102,7 @@ pub struct Satp(usize);
 
 impl Satp {
     pub fn from_address(address: usize) -> Self {
-        let address = crate::page::align_address(address);
+        let address = crate::mmu::align_address(address);
         let satp = address >> 12;
         Satp(satp)
     }

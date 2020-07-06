@@ -3,18 +3,23 @@
 
 mod console;
 mod cpu_status;
+mod mmu;
 mod page;
 mod uart;
 
-use page::Sv39Table;
+use mmu::Sv39Table;
 
 #[no_mangle]
 extern "C" fn kmain() {
     cpu_status::setup_trap();
     cpu_status::inspect_trap_vector();
     cpu_status::print_misa_info();
-    let table = unsafe { page::setup().as_ref().unwrap() };
-    page::print_page_table(table);
+    let table = unsafe { mmu::setup().as_mut().unwrap() };
+    table.alloc(4);
+    table.alloc(1);
+    table.alloc(8);
+    table.alloc(1);
+    mmu::print_page_table(table);
     abort();
 }
 
