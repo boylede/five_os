@@ -3,11 +3,12 @@
 
 mod console;
 mod cpu_status;
+mod page;
 mod uart;
 
 #[no_mangle]
 extern "C" fn kmain() {
-    println!("Entered Rust Kernel");
+    cpu_status::inspect_trap_vector();
     cpu_status::print_misa_info();
     abort();
 }

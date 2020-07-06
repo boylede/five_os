@@ -1,5 +1,8 @@
 extern "C" {
-    fn asm_get_misa() -> u64;
+    fn asm_get_misa() -> usize;
+    static asm_trap_vector: usize;
+    fn asm_get_mtvec() -> usize;
+    fn asm_get_satp() -> usize;
 }
 
 #[macro_use]
@@ -65,4 +68,50 @@ fn get_base_width() -> u64 {
         return 64;
     }
     return 128;
+}
+
+pub fn inspect_trap_vector() {
+    println!("trap vector: {:x}", unsafe { asm_trap_vector });
+    match unsafe { asm_trap_vector } & 0b11 {
+        0b00 => println!("trap vector set correctly"),
+        0b01 => println!("trap vector set incorrectly, contains vectored MODE"),
+        0b10 => println!("trap vector contains reserved value 2"),
+        0b11 => println!("trap vector contains reserved value 3"),
+        _ => unreachable!(),
+    };
+    let mtv = unsafe { asm_get_mtvec() };
+    if mtv != unsafe { asm_trap_vector } {
+        print!("mtvec has unexpected value: ");
+    }
+    match unsafe { asm_trap_vector } & 0b11 {
+        0b00 => println!("Direct Mode"),
+        0b01 => println!("Vectored Mode"),
+        0b10 => println!("Reserved Value 2 Set"),
+        0b11 => println!("Reserved Value 3 Set"),
+        _ => unreachable!(),
+    };
+    println!("mtvec: {:x}", mtv);
+}
+
+pub struct Satp(usize);
+
+impl Satp {
+    pub fn mode(&self) -> u8 {
+        unimplemented!()
+    }
+    pub fn asid(&self) -> u16 {
+        unimplemented!()
+    }
+    pub fn ppn(&self) -> usize {
+        match get_base_width() {
+            32 => self.0 & ((1 << 22) - 1),
+            64 => self.0 & ((1 << 44) - 1),
+            _ => unimplemented!(),
+        }
+    }
+}
+
+pub fn get_satp() -> Satp {
+    let satp = unsafe { asm_get_satp() };
+    Satp(satp)
 }
