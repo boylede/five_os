@@ -20,6 +20,27 @@ pub const fn align_address(address: usize) -> usize {
     (address + PAGE_ADDR_MASK) & !PAGE_ADDR_MASK
 }
 
+trait PageEntry {
+    fn is_free(&self) -> bool;
+    fn is_last(&self) -> bool;
+    fn clear(&mut self);
+}
+
+use crate::mmu::Sv39Entry;
+
+trait RootTable {
+    fn alloc(&mut self, count: usize) -> *mut u8;
+    fn dealloc(&mut self, page: *mut u8);
+    fn zalloc(&mut self, count: usize) -> *mut u8 {
+        let address = self.alloc(count);
+        for byte in 0..count * PAGE_SIZE {
+            unsafe { *address.add(byte) = 0 };
+        }
+        address
+    }
+}
+
+
 pub struct Page {
     flags: Pageflags,
 }
