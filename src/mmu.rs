@@ -25,12 +25,8 @@ pub const fn align_address(address: usize) -> usize {
 
 pub struct Page([u8; 4096]);
 
-trait PageTable {}
-
-trait PageEntry {}
-
 // must be aligned to 4096 byte boundary
-struct Sv32Table([Sv32Entry; 1024]);
+pub struct Sv32Table([Sv32Entry; 1024]);
 
 impl Sv32Table {
     pub fn at_address(address: usize) -> *mut Sv32Table {
@@ -63,7 +59,7 @@ impl Sv32Table {
 }
 
 // if not valid, all other values shall be ignored by hardware. software can freely use.
-struct Sv32Entry(u32);
+pub struct Sv32Entry(u32);
 
 impl Sv32Entry {
     pub fn valid(&self) -> bool {
@@ -116,7 +112,7 @@ impl Sv32Entry {
     }
 }
 
-struct Sv32Address(u32);
+pub struct Sv32Address(u32);
 
 impl Sv32Address {
     pub fn page_number(&self) -> usize {
@@ -131,7 +127,7 @@ impl Sv32Address {
     }
 }
 
-struct Sv39Entry(u64);
+pub struct Sv39Entry(u64);
 
 impl Sv39Entry {
     pub fn valid(&self) -> bool {
@@ -218,7 +214,7 @@ impl PageTable for Sv39Table {
     //
 }
 
-struct Sv39Address(u64);
+pub struct Sv39Address(u64);
 
 impl Sv39Address {
     pub fn offset(&self) -> u64 {
