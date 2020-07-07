@@ -210,10 +210,6 @@ impl Sv39Table {
     }
 }
 
-impl PageTable for Sv39Table {
-    //
-}
-
 pub struct Sv39Address(u64);
 
 impl Sv39Address {
