@@ -106,6 +106,9 @@ impl Satp {
         let satp = address >> 12;
         Satp(satp)
     }
+    pub fn address(&self) -> usize {
+        (self.0 & (1 << 21) - 1) << 12
+    }
     pub fn mode(&self) -> u8 {
         unimplemented!()
     }
