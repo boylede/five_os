@@ -24,6 +24,21 @@ pub struct Page {
     flags: Pageflags,
 }
 
+impl Page {
+    pub fn is_free(&self) -> bool {
+        self.flags.is_empty()
+    }
+    pub fn is_taken(&self) -> bool {
+        !self.flags.is_empty()
+    }
+    pub fn is_last(&self) -> bool {
+        self.flags.is_last()
+    }
+    pub fn clear(&mut self) {
+        self.flags.clear();
+    }
+}
+
 
 struct Pageflags(u8);
 
@@ -58,16 +73,48 @@ impl Pageflags {
 
 pub fn alloc(count: usize) -> *mut u8 {
     assert!(count > 0);
-    unimplemented!()
+    
+    let heap_size = unsafe {HEAP_SIZE};
+    let heap_start = unsafe {HEAP_START};
+    let total_page_count = heap_size / PAGE_SIZE;
+    let first_page = heap_size as *mut Page;
+    for i in 0..total_page_count - count {
+        let mut found = false;
+        let current_page = unsafe {first_page.add(i).as_ref().unwrap()};
+        if current_page.is_free() {
+            found = true;
+            for j in i..i + count {
+                let next_page = unsafe {first_page.add(j).as_ref().unwrap()};
+                if next_page.is_taken() {
+                    found = true;
+                    break;
+                }
+            }
+            if found {
+                return (unsafe {ALLOC_START} + PAGE_SIZE * i) as *mut u8;
+            }
+        }
+    }
+    panic!("out of memory");
 }
 
 pub fn dealloc(page: *mut u8) {
     assert!(!page.is_null());
-    unimplemented!()
+    let heap_start = unsafe {HEAP_START};
+    let page_number = (page as usize - unsafe { ALLOC_START}) / PAGE_SIZE;
+    let mut entry = (heap_start + page_number) as *mut Page;
+    // let mut entry = unsafe {entry.as_mut().unwrap()};
+    while !(*entry).is_last() && (*entry).is_taken() {
+        (*entry).clear();
+    }
 }
 
 pub fn zalloc(count: usize) -> *mut u8 {
-    unimplemented!()
+    let page = alloc(count);
+    for i in 0..PAGE_SIZE {
+        unsafe { *page.add(i) = 0 };
+    }
+    page
 }
 
 pub fn print_page_table(table: &[Page]) {
