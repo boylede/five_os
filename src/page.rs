@@ -102,10 +102,11 @@ pub fn dealloc(page: *mut u8) {
     assert!(!page.is_null());
     let heap_start = unsafe {HEAP_START};
     let page_number = (page as usize - unsafe { ALLOC_START}) / PAGE_SIZE;
-    let mut entry = (heap_start + page_number) as *mut Page;
-    // let mut entry = unsafe {entry.as_mut().unwrap()};
+    let entry_ptr = (heap_start + page_number) as *mut Page;
+    let mut entry = unsafe {entry_ptr.as_mut().unwrap()};
     while !(*entry).is_last() && (*entry).is_taken() {
         (*entry).clear();
+        entry = unsafe {entry_ptr.add(1).as_mut().unwrap()};
     }
 }
 
@@ -129,7 +130,6 @@ pub fn print_page_table(table: &[Page]) {
     println!("Meta: {:p} - {:p}", begining, end);
     println!("Phys: {:#04x} - {:#04x}", allocation_beginning, allocation_end);
     println!("----------------------------------------");
-
 }
 
 pub fn setup() {
