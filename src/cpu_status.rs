@@ -5,6 +5,11 @@ extern "C" {
     fn asm_set_mtvec(_: usize);
     fn asm_get_satp() -> usize;
     fn asm_set_satp(_:usize);
+    fn asm_get_mvendorid() -> usize;
+    fn asm_get_marchid() -> usize;
+    fn asm_get_mimpid() -> usize;
+    fn asm_get_mhartid() -> usize;
+    fn asm_get_mstatus() -> usize;
 }
 
 #[macro_use]
@@ -151,4 +156,20 @@ pub fn get_satp() -> Satp {
 
 pub fn set_satp(satp: &Satp) {
     unsafe {asm_set_satp(satp.raw())}
+}
+
+pub fn print_cpu_indo() {
+    // fn asm_get_mvendorid() -> usize;
+    // fn asm_get_marchid() -> usize;
+    // fn asm_get_mimpid() -> usize;
+    // fn asm_get_mhartid() -> usize;
+    // fn asm_get_mstatus() -> usize;
+    let vendor = unsafe { asm_get_mvendorid()};
+    let architecture = unsafe {asm_get_marchid()};
+    let implementation = unsafe { asm_get_mimpid()};
+    println!("--- CPU INFO ---");
+    println!("Vendor: {:x}", vendor);
+    println!("Architecture: {:x}", architecture);
+    println!("Implementaton: {:x}", implementation);
+    println!("----------------");
 }
