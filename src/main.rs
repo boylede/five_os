@@ -12,9 +12,11 @@ use mmu::Sv39Table;
 #[no_mangle]
 extern "C" fn kmain() {
     cpu_status::print_cpu_indo();
+    cpu_status::print_misa_info();
+    
     cpu_status::setup_trap();
     cpu_status::inspect_trap_vector();
-    cpu_status::print_misa_info();
+    
     let table = unsafe { mmu::setup().as_mut().unwrap() };
     table.alloc(4);
     table.alloc(1);

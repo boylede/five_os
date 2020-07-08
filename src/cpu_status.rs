@@ -4,7 +4,7 @@ extern "C" {
     fn asm_get_mtvec() -> usize;
     fn asm_set_mtvec(_: usize);
     fn asm_get_satp() -> usize;
-    fn asm_set_satp(_:usize);
+    fn asm_set_satp(_: usize);
     fn asm_get_mvendorid() -> usize;
     fn asm_get_marchid() -> usize;
     fn asm_get_mimpid() -> usize;
@@ -23,11 +23,38 @@ pub struct Misa {
 
 const EXTENSION_NAMES: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
+const EXTENSION_DESCRIPTIONS: [&str; 26] = [
+    "Atomic",
+    "reserved B",
+    "Compressed",
+    "Double-precision floating point",
+    "rv32E base isa",
+    "single-precision Floating point",
+    "\"additional standards present (G)\"",
+    "Hypervisor",
+    "rv32I/64I/128I base isa",
+    "reserved J",
+    "reserved K",
+    "reserved L",
+    "integer Multiply/divide",
+    "user-level interrupts (N)",
+    "reserved O",
+    "reserved P",
+    "Quad precision floating point",
+    "reserved R",
+    "Supervisor Mode",
+    "reserved T",
+    "User Mode",
+    "reserved V",
+    "reserved W",
+    "\"non-standard eXtensions present\"",
+    "reserved Y",
+    "reserved Z",
+];
+
 pub fn print_misa_info() {
+    println!("--- MISA INFO ---");
     let misa = unsafe { asm_get_misa() };
-
-    // todo: bug here? gives csr_mtvec error if removed.
-
     let xlen = {
         let mut misa: i64 = misa as i64;
         if misa > 0 {
@@ -43,16 +70,16 @@ pub fn print_misa_info() {
     };
     let checked_width = get_base_width();
     if xlen != checked_width {
-        print!(
-            "MISA reports different base width than empirically found: {} vs {}",
+        println!(
+            "ERROR: MISA reports different base width than empirically found: {} vs {}",
             xlen, checked_width
         );
     } else {
-        print!("MISA reports base width {}", xlen);
+        println!("Base ISA Width: {}", xlen);
     }
 
     let extensions = misa & 0x01FF_FFFF;
-    print!(" and found extensions ");
+    print!("Extensions: ");
     for (i, letter) in EXTENSION_NAMES.chars().enumerate() {
         let mask = 1 << i;
         if extensions & mask > 0 {
@@ -60,6 +87,14 @@ pub fn print_misa_info() {
         }
     }
     println!();
+    println!("--- Extensions ---");
+    for (i, desc) in EXTENSION_DESCRIPTIONS.iter().enumerate() {
+        let mask = 1 << i;
+        if extensions & mask > 0 {
+            println!("{}", desc);
+        }
+    }
+    println!("----------------");
 }
 
 fn get_base_width() -> u64 {
@@ -129,15 +164,13 @@ impl Satp {
     }
     pub fn set_mode(&mut self, value: u8) {
         match get_base_width() {
-            32 => (
-                unimplemented!()
-            ),
+            32 => (unimplemented!()),
             64 => {
-                let mut mode: usize = (value & ( 1 << 4) - 1) as usize;
+                let mut mode: usize = (value & (1 << 4) - 1) as usize;
                 mode = mode << 60;
                 self.0 = self.0 & (1 << 60) - 1;
                 self.0 = self.0 | mode;
-            },
+            }
             _ => unimplemented!(),
         }
     }
@@ -155,21 +188,15 @@ pub fn get_satp() -> Satp {
 }
 
 pub fn set_satp(satp: &Satp) {
-    unsafe {asm_set_satp(satp.raw())}
+    unsafe { asm_set_satp(satp.raw()) }
 }
 
 pub fn print_cpu_indo() {
-    // fn asm_get_mvendorid() -> usize;
-    // fn asm_get_marchid() -> usize;
-    // fn asm_get_mimpid() -> usize;
-    // fn asm_get_mhartid() -> usize;
-    // fn asm_get_mstatus() -> usize;
-    let vendor = unsafe { asm_get_mvendorid()};
-    let architecture = unsafe {asm_get_marchid()};
-    let implementation = unsafe { asm_get_mimpid()};
+    let vendor = unsafe { asm_get_mvendorid() };
+    let architecture = unsafe { asm_get_marchid() };
+    let implementation = unsafe { asm_get_mimpid() };
     println!("--- CPU INFO ---");
     println!("Vendor: {:x}", vendor);
     println!("Architecture: {:x}", architecture);
     println!("Implementaton: {:x}", implementation);
-    println!("----------------");
 }
