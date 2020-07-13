@@ -16,11 +16,13 @@ pub const fn align_address(address: usize) -> usize {
     (address + PAGE_ADDR_MASK) & !PAGE_ADDR_MASK
 }
 
-
-
+pub enum PageTable {
+    Sv32(Sv32Table),
+    Sv39(Sv39Table),
+    // Sv48. // todo
+}
 
 pub struct Page([u8; 4096]);
-
 
 trait PageEntry {
     fn is_free(&self) -> bool;
@@ -28,7 +30,7 @@ trait PageEntry {
     fn clear(&mut self);
 }
 
-trait PageTable {
+trait Table {
     type Entry;
     type Address;
     fn len() -> usize;
@@ -36,10 +38,9 @@ trait PageTable {
     fn get_physical_address(&self, address: usize) -> usize;
 }
 
-trait PageAddress {
+trait Address {
     fn to_physical(&self) -> usize;
 }
-
 
 // must be aligned to 4096 byte boundary
 pub struct Sv32Table([Sv32Entry; 1024]);
@@ -279,4 +280,9 @@ pub fn setup() -> *mut Sv39Table {
     crate::cpu_status::set_satp(&satp);
     let table = Sv39Table::at_address(satp.address());
     table
+}
+
+pub fn test() {
+    assert!(core::mem::size_of::<Sv32Entry>()==4);
+    assert!(core::mem::size_of::<Sv39Entry>()==8);
 }
