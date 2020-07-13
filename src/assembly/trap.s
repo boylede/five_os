@@ -1,4 +1,3 @@
-.section .text
 .option norvc
 .section .trap
 .global asm_trap_vector
