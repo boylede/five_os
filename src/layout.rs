@@ -19,8 +19,8 @@ extern "C" {
     static asm_trap_vector: usize;
 }
 
-
-/// Allows access to the global addresses PROVIDE'd in the linker map
+/// Allows access to the global addresses PROVIDE'd in the linker map. The main reason for this structure
+/// to exist is that Rust does not allow one to convert a pointer to an integer in a compile-time const.
 pub struct StaticLayout {
     pub text_start: usize,
     pub trap_start: usize,
@@ -43,6 +43,9 @@ pub struct StaticLayout {
 }
 
 impl StaticLayout {
+    /// creates a stack-allocated structure with all of the addresses of areas in memory.
+    /// # Unsafe
+    /// Accessing a global defined outside rust is unsafe, therefor this function makes heavy use of unsafe. We also convery those addresses (pointers) to integers.
     pub fn new() -> StaticLayout {
         StaticLayout {
             text_start: unsafe { &_text_start  as *const _} as usize,
