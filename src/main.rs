@@ -16,14 +16,15 @@ use mmu::Sv39Table;
 #[no_mangle]
 extern "C" fn kmain() {
     logo::print_logo();
-    mmu::test();
-    page::setup();
     cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
-
     layout::layout_sanity_check();
     cpu_status::setup_trap();
     cpu_status::inspect_trap_vector();
+
+    mmu::test();
+    page::setup();
+    kmem::setup();
     println!("reached end");
     abort();
 }
