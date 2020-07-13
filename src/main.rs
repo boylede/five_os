@@ -3,10 +3,11 @@
 
 mod console;
 mod cpu_status;
+mod layout;
 mod mmu;
 mod page;
+mod trap;
 mod uart;
-mod layout;
 
 use mmu::Sv39Table;
 
@@ -14,7 +15,7 @@ use mmu::Sv39Table;
 extern "C" fn kmain() {
     cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
-    
+
     layout::layout_sanity_check();
     cpu_status::setup_trap();
     cpu_status::print_trap_info();

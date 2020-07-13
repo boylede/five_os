@@ -1,5 +1,5 @@
-use crate::{print, println};
 use crate::layout::StaticLayout;
+use crate::{print, println};
 
 static mut ALLOC_START: usize = 0;
 /// page size per riscv Sv39 spec is 4096 bytes

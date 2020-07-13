@@ -207,8 +207,8 @@ pub fn print_cpu_info() {
 }
 
 pub fn print_trap_info() {
-    let mepc = unsafe {asm_get_mepc()};
+    let mepc = unsafe { asm_get_mepc() };
     println!("mepc: {:x}", mepc);
-    let mtvec = unsafe {asm_get_mtvec()};
+    let mtvec = unsafe { asm_get_mtvec() };
     println!("mtvec: {:x}", mtvec);
 }

@@ -9,11 +9,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let assembly_files = vec![
         "boot.s",
         "trap.s",
-        "mem.s",
         "cpu.s",
         ];
 
     let mut builder = Build::new();
+
     for file in assembly_files.iter() {
         let filename = asm_dir.join(file);
         builder.file(filename);

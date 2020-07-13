@@ -48,24 +48,24 @@ impl StaticLayout {
     /// Accessing a global defined outside rust is unsafe, therefor this function makes heavy use of unsafe. We also convery those addresses (pointers) to integers.
     pub fn new() -> StaticLayout {
         StaticLayout {
-            text_start: unsafe { &_text_start  as *const _} as usize,
-            trap_start: unsafe { &_trap_start  as *const _} as usize,
-            trap_end: unsafe { &_trap_end  as *const _} as usize,
-            text_end: unsafe { &_text_end  as *const _} as usize,
-            global_pointer: unsafe { &_global_pointer  as *const _} as usize,
-            rodata_start: unsafe { &_rodata_start  as *const _} as usize,
-            rodata_end: unsafe { &_rodata_end  as *const _} as usize,
-            data_start: unsafe { &_data_start  as *const _} as usize,
-            data_end: unsafe { &_data_end  as *const _} as usize,
-            bss_start: unsafe { &_bss_start  as *const _} as usize,
-            bss_end: unsafe { &_bss_end  as *const _} as usize,
-            memory_start: unsafe { &_memory_start  as *const _} as usize,
-            stack_start: unsafe { &_stack_start  as *const _} as usize,
-            stack_end: unsafe { &_stack_end  as *const _} as usize,
-            heap_start: unsafe { &_heap_start  as *const _} as usize,
-            heap_size: unsafe { &_heap_size  as *const _} as usize,
-            memory_end: unsafe { &_memory_end  as *const _} as usize,
-            trap_vector: unsafe { &asm_trap_vector  as *const _} as usize,
+            text_start: unsafe { &_text_start as *const _ } as usize,
+            trap_start: unsafe { &_trap_start as *const _ } as usize,
+            trap_end: unsafe { &_trap_end as *const _ } as usize,
+            text_end: unsafe { &_text_end as *const _ } as usize,
+            global_pointer: unsafe { &_global_pointer as *const _ } as usize,
+            rodata_start: unsafe { &_rodata_start as *const _ } as usize,
+            rodata_end: unsafe { &_rodata_end as *const _ } as usize,
+            data_start: unsafe { &_data_start as *const _ } as usize,
+            data_end: unsafe { &_data_end as *const _ } as usize,
+            bss_start: unsafe { &_bss_start as *const _ } as usize,
+            bss_end: unsafe { &_bss_end as *const _ } as usize,
+            memory_start: unsafe { &_memory_start as *const _ } as usize,
+            stack_start: unsafe { &_stack_start as *const _ } as usize,
+            stack_end: unsafe { &_stack_end as *const _ } as usize,
+            heap_start: unsafe { &_heap_start as *const _ } as usize,
+            heap_size: unsafe { &_heap_size as *const _ } as usize,
+            memory_end: unsafe { &_memory_end as *const _ } as usize,
+            trap_vector: unsafe { &asm_trap_vector as *const _ } as usize,
         }
     }
 }
@@ -77,13 +77,17 @@ pub fn layout_sanity_check() {
     let l = StaticLayout::new();
     unsafe {
         println!("text: {:x} - {:x}", l.text_start, l.text_end);
-        println!("\ttrap: {:x} - {:x}", l.trap_start , l.trap_end );
-        println!("global: {:x}", l.global_pointer );
-        println!("rodata: {:x} - {:x}", l.rodata_start , l.rodata_end );
-        println!("data: {:x} - {:x}", l.data_start , l.data_end );
-        println!("bss: {:x} - {:x}", l.bss_start , l.bss_end );
-        println!("physical memory: {:x} - {:x}", l.memory_start , l.memory_end );
-        println!("\tstack: {:x} - {:x}", l.stack_start , l.stack_end );
-        println!("\theap: {:x} - {:x}", l.heap_start , l.heap_start  + l.heap_size );
-    }   
+        println!("\ttrap: {:x} - {:x}", l.trap_start, l.trap_end);
+        println!("global: {:x}", l.global_pointer);
+        println!("rodata: {:x} - {:x}", l.rodata_start, l.rodata_end);
+        println!("data: {:x} - {:x}", l.data_start, l.data_end);
+        println!("bss: {:x} - {:x}", l.bss_start, l.bss_end);
+        println!("physical memory: {:x} - {:x}", l.memory_start, l.memory_end);
+        println!("\tstack: {:x} - {:x}", l.stack_start, l.stack_end);
+        println!(
+            "\theap: {:x} - {:x}",
+            l.heap_start,
+            l.heap_start + l.heap_size
+        );
+    }
 }

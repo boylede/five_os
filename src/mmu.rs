@@ -1,5 +1,5 @@
-use crate::{print, println};
 use crate::layout::StaticLayout;
+use crate::{print, println};
 
 static mut ALLOC_START: usize = 0;
 /// page size per riscv Sv39 spec is 4096 bytes
@@ -175,7 +175,11 @@ impl Sv39Entry {
     }
     pub fn ppn(&self) -> [usize; 3] {
         let page = self.page_number();
-        [page & ((1 << 9) - 1), page & ((1 << 9) - 1) >> 9, page & ((1 << 9) - 1) >> 18]
+        [
+            page & ((1 << 9) - 1),
+            page & ((1 << 9) - 1) >> 9,
+            page & ((1 << 9) - 1) >> 18,
+        ]
     }
 }
 
@@ -185,7 +189,7 @@ impl Sv39Table {
     pub fn at_address(address: usize) -> *mut Sv39Table {
         let address = address as *mut u8;
         for i in 0..PAGE_SIZE {
-            unsafe { *(address.add(i)) = 0};
+            unsafe { *(address.add(i)) = 0 };
         }
         address as *mut Sv39Table
     }
@@ -214,7 +218,11 @@ impl Sv39Address {
     }
     pub fn vpn(&self) -> [u64; 3] {
         let page = self.page_number();
-        [(page & ((1 << 9) - 1)) >> 12, (page & ((1 << 9) - 1)) >> 21, page >> 30]
+        [
+            (page & ((1 << 9) - 1)) >> 12,
+            (page & ((1 << 9) - 1)) >> 21,
+            page >> 30,
+        ]
     }
     pub fn page_number(&self) -> u64 {
         self.0 >> 12
@@ -232,9 +240,11 @@ pub fn print_page_table(table: &Sv39Table) {
     println!();
     println!("Page Allocation Table");
     println!("Meta: {:p} - {:p}", begining, end);
-    println!("Phys: {:#04x} - {:#04x}", allocation_beginning, allocation_end);
+    println!(
+        "Phys: {:#04x} - {:#04x}",
+        allocation_beginning, allocation_end
+    );
     println!("----------------------------------------");
-
 }
 
 pub fn setup() -> *mut Sv39Table {
