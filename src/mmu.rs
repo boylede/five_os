@@ -1,9 +1,5 @@
 use crate::{print, println};
-
-extern "C" {
-    static HEAP_START: usize;
-    static HEAP_SIZE: usize;
-}
+use crate::layout::StaticLayout;
 
 static mut ALLOC_START: usize = 0;
 /// page size per riscv Sv39 spec is 4096 bytes
@@ -226,8 +222,9 @@ impl Sv39Address {
 }
 
 pub fn print_page_table(table: &Sv39Table) {
-    let total_page_count = unsafe { HEAP_SIZE } / PAGE_SIZE;
-    let mut begining = unsafe { HEAP_START } as *const Page;
+    let layout = StaticLayout::new();
+    let total_page_count = layout.heap_size / PAGE_SIZE;
+    let mut begining = layout.heap_start as *const Page;
     let end = unsafe { begining.add(total_page_count) };
     let allocation_beginning = unsafe { ALLOC_START };
     let allocation_end = allocation_beginning + total_page_count * PAGE_SIZE;
@@ -241,13 +238,15 @@ pub fn print_page_table(table: &Sv39Table) {
 }
 
 pub fn setup() -> *mut Sv39Table {
-    println!("heap_start is {:x}", unsafe {HEAP_START});
-    let mut satp = crate::cpu_status::Satp::from_address(unsafe { HEAP_START });
-    println!("resulting address is {:x}", align_address(unsafe {HEAP_START}));
+    let layout = StaticLayout::new();
+    println!("heap_start is {:x}", layout.heap_start);
+    let mut satp = crate::cpu_status::Satp::from_address(layout.heap_start);
+    println!(
+        "resulting address is {:x}",
+        align_address(layout.heap_start)
+    );
     satp.set_mode(8);
     crate::cpu_status::set_satp(&satp);
     let table = Sv39Table::at_address(satp.address());
     table
 }
-
-

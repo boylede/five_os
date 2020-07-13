@@ -1,9 +1,5 @@
 use crate::{print, println};
-
-extern "C" {
-    static HEAP_START: usize;
-    static HEAP_SIZE: usize;
-}
+use crate::layout::StaticLayout;
 
 static mut ALLOC_START: usize = 0;
 /// page size per riscv Sv39 spec is 4096 bytes
@@ -60,7 +56,6 @@ impl Page {
     }
 }
 
-
 struct Pageflags(u8);
 
 impl Pageflags {
@@ -94,9 +89,10 @@ impl Pageflags {
 
 pub fn alloc(count: usize) -> *mut u8 {
     assert!(count > 0);
-    
-    let heap_size = unsafe {HEAP_SIZE};
-    let heap_start = unsafe {HEAP_START};
+
+    let layout = StaticLayout::new();
+    let heap_size = layout.heap_size;
+    let heap_start = layout.heap_start;
     let total_page_count = heap_size / PAGE_SIZE;
     let first_page = heap_size as *mut Page;
     for i in 0..total_page_count - count {
@@ -121,8 +117,9 @@ pub fn alloc(count: usize) -> *mut u8 {
 
 pub fn dealloc(page: *mut u8) {
     assert!(!page.is_null());
-    let heap_start = unsafe {HEAP_START};
-    let page_number = (page as usize - unsafe { ALLOC_START}) / PAGE_SIZE;
+    let layout = StaticLayout::new();
+    let heap_start = layout.heap_start;
+    let page_number = (page as usize - unsafe { ALLOC_START }) / PAGE_SIZE;
     let entry_ptr = (heap_start + page_number) as *mut Page;
     let mut entry = unsafe {entry_ptr.as_mut().unwrap()};
     while !(*entry).is_last() && (*entry).is_taken() {
@@ -140,8 +137,12 @@ pub fn zalloc(count: usize) -> *mut u8 {
 }
 
 pub fn print_page_table(table: &[Page]) {
-    let total_page_count = unsafe { HEAP_SIZE } / PAGE_SIZE;
-    let mut begining = unsafe { HEAP_START } as *const Page;
+    let layout = StaticLayout::new();
+    let heap_size = layout.heap_size;
+    let heap_start = layout.heap_start;
+    let total_page_count = heap_size / PAGE_SIZE;
+    assert!(total_page_count > 0);
+    let mut begining = heap_start as *const Page;
     let end = unsafe { begining.add(total_page_count) };
     let allocation_beginning = unsafe { ALLOC_START };
     let allocation_end = allocation_beginning + total_page_count * PAGE_SIZE;

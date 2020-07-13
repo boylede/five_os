@@ -17,6 +17,10 @@ SECTIONS
   .text : {
     PROVIDE(_text_start = .);
     *(.text.init) *(.text .text.*)
+    PROVIDE(_trap_start = .);
+    . = ALIGN(4096);
+    *(.trap)
+    PROVIDE(_trap_end = .);
     PROVIDE(_text_end = .);
   } >ram AT>ram :text
    PROVIDE(_global_pointer = .);

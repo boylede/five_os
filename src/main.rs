@@ -6,15 +6,18 @@ mod cpu_status;
 mod mmu;
 mod page;
 mod uart;
+mod layout;
 
 use mmu::Sv39Table;
 
 #[no_mangle]
 extern "C" fn kmain() {
-    cpu_status::print_cpu_indo();
+    cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
     
+    layout::layout_sanity_check();
     cpu_status::setup_trap();
+    cpu_status::print_trap_info();
     cpu_status::inspect_trap_vector();
     
     let table = unsafe { mmu::setup().as_mut().unwrap() };

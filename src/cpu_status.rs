@@ -1,6 +1,5 @@
 extern "C" {
     fn asm_get_misa() -> usize;
-    static asm_trap_vector: usize;
     fn asm_get_mtvec() -> usize;
     fn asm_set_mtvec(_: usize);
     fn asm_get_satp() -> usize;
@@ -10,10 +9,12 @@ extern "C" {
     fn asm_get_mimpid() -> usize;
     fn asm_get_mhartid() -> usize;
     fn asm_get_mstatus() -> usize;
+    fn asm_get_mepc() -> usize;
 }
 
 #[macro_use]
 use crate::{print, println};
+use crate::layout::StaticLayout;
 
 #[derive(Debug)]
 pub struct Misa {
@@ -116,17 +117,21 @@ fn set_trap_vector(address: usize) {
 }
 
 pub fn setup_trap() {
-    let mut address = unsafe { asm_trap_vector };
-    print!("setting trap: {:x}", address);
-    let address_alignment = 4 - 1;
-    address += address_alignment;
-    address = address & !address_alignment;
-    println!(" -> {:x}", address);
+    let address = StaticLayout::new().trap_vector;
+    println!("trap is located at: {:x}", address);
+    let mask = address & 0b11;
+    if mask != 0 {
+        panic!("Trap vector not aligned to 4-byte boundary: {:x}", address);
+    }
     set_trap_vector(address);
 }
 
 pub fn inspect_trap_vector() {
     let mtvec = unsafe { asm_get_mtvec() };
+    if mtvec == 0 {
+        println!("trap vector not initialized");
+        return;
+    }
     println!("trap vector: {:x}", mtvec);
     match mtvec & 0b11 {
         0b00 => println!("Direct Mode"),
@@ -191,7 +196,7 @@ pub fn set_satp(satp: &Satp) {
     unsafe { asm_set_satp(satp.raw()) }
 }
 
-pub fn print_cpu_indo() {
+pub fn print_cpu_info() {
     let vendor = unsafe { asm_get_mvendorid() };
     let architecture = unsafe { asm_get_marchid() };
     let implementation = unsafe { asm_get_mimpid() };
@@ -199,4 +204,11 @@ pub fn print_cpu_indo() {
     println!("Vendor: {:x}", vendor);
     println!("Architecture: {:x}", architecture);
     println!("Implementaton: {:x}", implementation);
+}
+
+pub fn print_trap_info() {
+    let mepc = unsafe {asm_get_mepc()};
+    println!("mepc: {:x}", mepc);
+    let mtvec = unsafe {asm_get_mtvec()};
+    println!("mtvec: {:x}", mtvec);
 }
