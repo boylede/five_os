@@ -30,7 +30,8 @@ impl AllocList {
         (self.flags_size & !TAKEN_BIT) as usize
     }
     pub fn set_size(&mut self, size: usize) {
-        assert!(size as u64 | TAKEN_BIT == 0);
+        // ensure taken_bit is clear in input
+        assert!(size as u64 & TAKEN_BIT == 0);
         let taken = self.flags_size & TAKEN_BIT;
         self.flags_size = (size as u64 & !TAKEN_BIT) | taken;
     }
