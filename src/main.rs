@@ -23,15 +23,8 @@ extern "C" fn kmain() {
 
     layout::layout_sanity_check();
     cpu_status::setup_trap();
-    cpu_status::print_trap_info();
     cpu_status::inspect_trap_vector();
-    
-    let table = unsafe { mmu::setup().as_mut().unwrap() };
-    table.alloc(4);
-    table.alloc(1);
-    table.alloc(8);
-    table.alloc(1);
-    mmu::print_page_table(table);
+    println!("reached end");
     abort();
 }
 
