@@ -22,7 +22,6 @@ pub fn align_to(address: usize, alignment: usize) -> usize {
     (address + mask) & !mask
 }
 
-
 trait PageEntry {
     fn is_free(&self) -> bool;
     fn is_last(&self) -> bool;
@@ -240,8 +239,10 @@ pub fn setup() {
     println!("setting up byte-map for {} pages", total_page_count);
     let page_table = layout.heap_start as *mut Page;
     for i in 0..total_page_count {
-        let current_page = unsafe {page_table.add(i).as_mut()}.unwrap();
+        let current_page = unsafe { page_table.add(i).as_mut() }.unwrap();
         current_page.clear();
     }
-    unsafe {ALLOC_START = align_address(layout.heap_start + total_page_count * size_of::<Page>())};
+    unsafe {
+        ALLOC_START = align_address(layout.heap_start + total_page_count * size_of::<Page>())
+    };
 }

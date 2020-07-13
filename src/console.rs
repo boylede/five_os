@@ -1,4 +1,3 @@
-
 use crate::uart::Uart;
 
 #[macro_use]
