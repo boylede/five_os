@@ -106,17 +106,22 @@ pub fn alloc(count: usize) -> *mut u8 {
 
 pub fn dealloc(page: *mut u8) {
     assert!(!page.is_null());
-    let layout = StaticLayout::new();
-    let heap_start = layout.heap_start;
-    let page_number = (page as usize - unsafe { ALLOC_START }) / PAGE_SIZE;
-    let entry_ptr = (heap_start + page_number) as *mut Page;
-    let mut entry = unsafe { entry_ptr.as_mut().unwrap() };
-    while !(*entry).is_last() && (*entry).is_taken() {
-        (*entry).clear();
-        entry = unsafe { entry_ptr.add(1).as_mut().unwrap() };
+    let mut page_number = address_to_page_index(page);
+
+    let (page_table, max_index) = page_table();
+    assert!(page_number < max_index);
+
+    loop {
+        let page = &mut page_table[page_number];
+        if !page.is_last() && page.is_taken() {
+            page.clear();
+            page_number = page_number + 1;
+        } else {
+            assert!(page.is_last(), "Double free detected");
+            page.clear();
+            break;
+        }
     }
-    assert!((*entry).is_last() == true, "Double-free detected.");
-    (*entry).clear();
 }
 
 pub fn zalloc(count: usize) -> *mut u8 {
@@ -175,4 +180,10 @@ pub fn page_table() -> (&'static mut [Page], usize) {
     let count = layout.heap_size / PAGE_SIZE;
     let table = unsafe { core::slice::from_raw_parts_mut(heap_start, count) };
     (table, count)
+}
+
+pub fn address_to_page_index(address: *mut u8) -> usize {
+    assert!(!address.is_null());
+    let alloc_start = unsafe {ALLOC_START};
+    (address as usize - alloc_start) / PAGE_SIZE
 }
