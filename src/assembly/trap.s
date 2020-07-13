@@ -4,12 +4,5 @@
 .align 4
 asm_trap_vector:
     # todo: complete
-    addi a0, a0, 0
-    addi a0, a0, 0
-    addi a0, a0, 0
-    addi a0, a0, 0
-    addi a0, a0, 0
-    addi a0, a0, 0
-    addi a0, a0, 0
-    addi a0, a0, 0
+    add x0, x0, x0
     mret
