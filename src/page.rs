@@ -94,6 +94,7 @@ pub fn alloc(count: usize) -> *mut u8 {
     for (i, pages) in page_table.windows(count).enumerate() {
         if pages.iter().all(|page| page.is_free()) {
             found = Some(i);
+            break;
         }
     }
     if let Some(i) = found {
