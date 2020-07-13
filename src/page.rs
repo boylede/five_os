@@ -1,5 +1,6 @@
 use crate::layout::StaticLayout;
 use crate::{print, println};
+use core::mem::size_of;
 
 static mut ALLOC_START: usize = 0;
 /// page size per riscv Sv39 spec is 4096 bytes
@@ -232,8 +233,15 @@ pub fn print_page_table(table: &[Page]) {
     }
 }
 
+/// Setup the kernel's page table to keep track of allocations.
 pub fn setup() {
     let layout = StaticLayout::new();
-
-    unimplemented!()
+    let total_page_count = layout.heap_size / PAGE_SIZE;
+    println!("setting up byte-map for {} pages", total_page_count);
+    let page_table = layout.heap_start as *mut Page;
+    for i in 0..total_page_count {
+        let current_page = unsafe {page_table.add(i).as_mut()}.unwrap();
+        current_page.clear();
+    }
+    unsafe {ALLOC_START = align_address(layout.heap_start + total_page_count * size_of::<Page>())};
 }

@@ -13,6 +13,7 @@ use mmu::Sv39Table;
 
 #[no_mangle]
 extern "C" fn kmain() {
+    page::setup();
     cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
 
