@@ -5,6 +5,7 @@ mod console;
 mod cpu_status;
 mod kmem;
 mod layout;
+mod logo;
 mod mmu;
 mod page;
 mod trap;
@@ -14,6 +15,7 @@ use mmu::Sv39Table;
 
 #[no_mangle]
 extern "C" fn kmain() {
+    logo::print_logo();
     mmu::test();
     page::setup();
     cpu_status::print_cpu_info();
