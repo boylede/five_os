@@ -173,12 +173,10 @@ pub fn print_page_table(table: &[Page]) {
 /// Setup the kernel's page table to keep track of allocations.
 pub fn setup() {
     let layout = StaticLayout::new();
-    let total_page_count = layout.heap_size / PAGE_SIZE;
+    let (page_table, total_page_count) = page_table();
     println!("setting up byte-map for {} pages", total_page_count);
-    let page_table = layout.heap_start as *mut Page;
-    for i in 0..total_page_count {
-        let current_page = unsafe { page_table.add(i).as_mut() }.unwrap();
-        current_page.clear();
+    for page in page_table.iter_mut() {
+        page.clear();
     }
     unsafe {
         ALLOC_START = align_address(layout.heap_start + total_page_count * size_of::<Page>())
