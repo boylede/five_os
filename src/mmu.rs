@@ -21,6 +21,26 @@ pub const fn align_address(address: usize) -> usize {
 
 pub struct Page([u8; 4096]);
 
+
+trait PageEntry {
+    fn is_free(&self) -> bool;
+    fn is_last(&self) -> bool;
+    fn clear(&mut self);
+}
+
+trait PageTable {
+    type Entry;
+    type Address;
+    fn len() -> usize;
+    fn initialize(base_address: usize) -> Self;
+    fn get_physical_address(&self, address: usize) -> usize;
+}
+
+trait PageAddress {
+    fn to_physical(&self) -> usize;
+}
+
+
 // must be aligned to 4096 byte boundary
 pub struct Sv32Table([Sv32Entry; 1024]);
 
