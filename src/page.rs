@@ -16,6 +16,12 @@ pub const fn align_address(address: usize) -> usize {
     (address + PAGE_ADDR_MASK) & !PAGE_ADDR_MASK
 }
 
+pub fn align_to(address: usize, alignment: usize) -> usize {
+    let mask = alignment - 1;
+    (address + mask) & !mask
+}
+
+
 trait PageEntry {
     fn is_free(&self) -> bool;
     fn is_last(&self) -> bool;
@@ -24,8 +30,50 @@ trait PageEntry {
 
 use crate::mmu::Sv39Entry;
 
-trait RootTable {
-    fn alloc(&mut self, count: usize) -> *mut u8;
+trait PageTable {
+    type Entry;
+    type Address;
+    fn len() -> usize;
+    fn alloc(&mut self, count: usize) -> *mut u8 {
+        assert!(count > 0);
+        // with 128mb of space
+        // that leads to 32,768 4kb pages
+        // the root page table holds self.len()
+        // pages.
+        // alloc needs to attempt to allocate new memory
+        //
+        let layout = StaticLayout::new();
+        let heap_size = layout.heap_size;
+        let heap_start = layout.heap_start;
+        let total_page_count = heap_size / PAGE_SIZE;
+        let first_page = heap_size as *mut Page;
+        for i in 0..total_page_count - count {
+            let mut found = false;
+            let current_page = unsafe { first_page.add(i).as_ref().unwrap() };
+            if current_page.is_free() {
+                found = true;
+                for j in i..i + count {
+                    let next_page = unsafe { first_page.add(j).as_ref().unwrap() };
+                    if next_page.is_taken() {
+                        found = false;
+                        break;
+                    }
+                }
+                if found {
+                    let address = (unsafe { ALLOC_START } + PAGE_SIZE * i) as *mut u8;
+                    for j in i..i + count {
+                        let page = unsafe { first_page.add(j).as_mut().unwrap() };
+                        page.set_taken();
+                        if j == i + count - 1 {
+                            page.set_last();
+                        }
+                    }
+                    return address;
+                }
+            }
+        }
+        panic!("unable to allocate {} pages", count);
+    }
     fn dealloc(&mut self, page: *mut u8);
     fn zalloc(&mut self, count: usize) -> *mut u8 {
         let address = self.alloc(count);
@@ -34,8 +82,13 @@ trait RootTable {
         }
         address
     }
+    fn initialize(base_address: usize) -> Self;
+    fn get_physical_address(&self, address: usize) -> usize;
 }
 
+trait PageAddress {
+    fn to_physical(&self) -> usize;
+}
 
 pub struct Page {
     flags: Pageflags,
@@ -53,6 +106,12 @@ impl Page {
     }
     pub fn clear(&mut self) {
         self.flags.clear();
+    }
+    pub fn set_taken(&mut self) {
+        self.flags.set_taken();
+    }
+    pub fn set_last(&mut self) {
+        self.flags.set_last();
     }
 }
 
@@ -97,22 +156,30 @@ pub fn alloc(count: usize) -> *mut u8 {
     let first_page = heap_size as *mut Page;
     for i in 0..total_page_count - count {
         let mut found = false;
-        let current_page = unsafe {first_page.add(i).as_ref().unwrap()};
+        let current_page = unsafe { first_page.add(i).as_ref().unwrap() };
         if current_page.is_free() {
             found = true;
             for j in i..i + count {
-                let next_page = unsafe {first_page.add(j).as_ref().unwrap()};
+                let next_page = unsafe { first_page.add(j).as_ref().unwrap() };
                 if next_page.is_taken() {
-                    found = true;
+                    found = false;
                     break;
                 }
             }
             if found {
-                return (unsafe {ALLOC_START} + PAGE_SIZE * i) as *mut u8;
+                let address = (unsafe { ALLOC_START } + PAGE_SIZE * i) as *mut u8;
+                for j in i..i + count {
+                    let page = unsafe { first_page.add(j).as_mut().unwrap() };
+                    page.set_taken();
+                    if j == i + count - 1 {
+                        page.set_last();
+                    }
+                }
+                return address;
             }
         }
     }
-    panic!("out of memory");
+    panic!("unable to allocate {} pages", count);
 }
 
 pub fn dealloc(page: *mut u8) {
@@ -121,19 +188,21 @@ pub fn dealloc(page: *mut u8) {
     let heap_start = layout.heap_start;
     let page_number = (page as usize - unsafe { ALLOC_START }) / PAGE_SIZE;
     let entry_ptr = (heap_start + page_number) as *mut Page;
-    let mut entry = unsafe {entry_ptr.as_mut().unwrap()};
+    let mut entry = unsafe { entry_ptr.as_mut().unwrap() };
     while !(*entry).is_last() && (*entry).is_taken() {
         (*entry).clear();
-        entry = unsafe {entry_ptr.add(1).as_mut().unwrap()};
+        entry = unsafe { entry_ptr.add(1).as_mut().unwrap() };
     }
+    assert!((*entry).is_last() == true, "Double-free detected.");
+    (*entry).clear();
 }
 
 pub fn zalloc(count: usize) -> *mut u8 {
-    let page = alloc(count);
-    for i in 0..PAGE_SIZE {
+    let page = alloc(count) as *mut u64;
+    for i in 0..(PAGE_SIZE * count) / 8 {
         unsafe { *page.add(i) = 0 };
     }
-    page
+    page as *mut u8
 }
 
 pub fn print_page_table(table: &[Page]) {
@@ -150,10 +219,21 @@ pub fn print_page_table(table: &[Page]) {
     println!();
     println!("Page Allocation Table");
     println!("Meta: {:p} - {:p}", begining, end);
-    println!("Phys: {:#04x} - {:#04x}", allocation_beginning, allocation_end);
+    println!(
+        "Phys: {:#04x} - {:#04x}",
+        allocation_beginning, allocation_end
+    );
     println!("----------------------------------------");
+    let mut index = 0;
+    while begining < end {
+        if (unsafe { begining.as_ref().unwrap() }).is_taken() {
+            //
+        }
+    }
 }
 
 pub fn setup() {
+    let layout = StaticLayout::new();
+
     unimplemented!()
 }
