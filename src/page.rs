@@ -6,7 +6,7 @@ static mut ALLOC_START: usize = 0;
 /// page size per riscv Sv39 spec is 4096 bytes
 /// which needs 12 bits to address each byte inside
 const PAGE_ADDR_MAGNITIDE: usize = 12;
-const PAGE_SIZE: usize = 1 << PAGE_ADDR_MAGNITIDE;
+pub const PAGE_SIZE: usize = 1 << PAGE_ADDR_MAGNITIDE;
 /// a mask with all used bits set
 const PAGE_ADDR_MASK: usize = PAGE_SIZE - 1;
 
@@ -17,10 +17,17 @@ pub const fn align_address(address: usize) -> usize {
     (address + PAGE_ADDR_MASK) & !PAGE_ADDR_MASK
 }
 
-pub fn align_to(address: usize, alignment: usize) -> usize {
+pub const fn align_to(address: usize, alignment: usize) -> usize {
     let mask = alignment - 1;
     (address + mask) & !mask
 }
+
+pub const fn align_power(address: usize, power: usize) -> usize {
+    let mask = (1 << power) - 1;
+    (address + mask) & !mask
+}
+
+
 
 pub struct Page {
     flags: Pageflags,
@@ -78,6 +85,7 @@ impl Pageflags {
     }
 }
 
+/// Allocates the number of pages requested
 pub fn alloc(count: usize) -> *mut u8 {
     assert!(count > 0);
     let (page_table, _) = page_table();
@@ -104,6 +112,7 @@ pub fn alloc(count: usize) -> *mut u8 {
     }
 }
 
+/// deallocates pages based on the pointer provided
 pub fn dealloc(page: *mut u8) {
     assert!(!page.is_null());
     let mut page_number = address_to_page_index(page);
@@ -124,6 +133,7 @@ pub fn dealloc(page: *mut u8) {
     }
 }
 
+/// Allocates the number of pages requested and zeros them.
 pub fn zalloc(count: usize) -> *mut u8 {
     let page = alloc(count) as *mut u64;
     for i in 0..(PAGE_SIZE * count) / 8 {
