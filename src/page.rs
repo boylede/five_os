@@ -1,6 +1,6 @@
 use crate::layout::StaticLayout;
 use crate::{print, println};
-use core::mem::size_of;
+use core::{mem::size_of, ptr::null_mut};
 
 static mut ALLOC_START: usize = 0;
 /// page size per riscv Sv39 spec is 4096 bytes
@@ -80,38 +80,28 @@ impl Pageflags {
 
 pub fn alloc(count: usize) -> *mut u8 {
     assert!(count > 0);
+    let (page_table, _) = page_table();
 
-    let layout = StaticLayout::new();
-    let heap_size = layout.heap_size;
-    let heap_start = layout.heap_start;
-    let total_page_count = heap_size / PAGE_SIZE;
-    let first_page = heap_size as *mut Page;
-    for i in 0..total_page_count - count {
-        let mut found = false;
-        let current_page = unsafe { first_page.add(i).as_ref().unwrap() };
-        if current_page.is_free() {
-            found = true;
-            for j in i..i + count {
-                let next_page = unsafe { first_page.add(j).as_ref().unwrap() };
-                if next_page.is_taken() {
-                    found = false;
-                    break;
-                }
-            }
-            if found {
-                let address = (unsafe { ALLOC_START } + PAGE_SIZE * i) as *mut u8;
-                for j in i..i + count {
-                    let page = unsafe { first_page.add(j).as_mut().unwrap() };
-                    page.set_taken();
-                    if j == i + count - 1 {
-                        page.set_last();
-                    }
-                }
-                return address;
-            }
+    let mut found = None;
+    for (i, pages) in page_table.windows(count).enumerate() {
+        if pages.iter().all(|page| page.is_free()) {
+            found = Some(i);
         }
     }
-    panic!("unable to allocate {} pages", count);
+    if let Some(i) = found {
+        page_table.iter_mut().enumerate().for_each(|(index, page)| {
+            if index == i || (index > i && index < i + count) {
+                page.set_taken();
+                if index == i + count - 1 {
+                    page.set_last();
+                }
+            }
+        });
+        let alloc_start = unsafe { ALLOC_START };
+        (alloc_start + PAGE_SIZE * i) as *mut u8
+    } else {
+        null_mut()
+    }
 }
 
 pub fn dealloc(page: *mut u8) {
@@ -177,4 +167,12 @@ pub fn setup() {
     unsafe {
         ALLOC_START = align_address(layout.heap_start + total_page_count * size_of::<Page>())
     };
+}
+
+pub fn page_table() -> (&'static mut [Page], usize) {
+    let layout = StaticLayout::new();
+    let heap_start = { layout.heap_start as *mut Page };
+    let count = layout.heap_size / PAGE_SIZE;
+    let table = unsafe { core::slice::from_raw_parts_mut(heap_start, count) };
+    (table, count)
 }
