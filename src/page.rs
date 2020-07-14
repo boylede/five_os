@@ -185,15 +185,29 @@ pub fn print_page_table() {
 
 /// Setup the kernel's page table to keep track of allocations.
 pub fn setup() {
-    let layout = StaticLayout::new();
+    println!("----------- Dynamic Layout --------------");
+    let layout = StaticLayout::get();
     let (page_table, total_page_count) = page_table();
-    println!("setting up byte-map for {} pages", total_page_count);
+    println!("{} pages x {}-bytes", total_page_count, PAGE_SIZE);
     for page in page_table.iter_mut() {
         page.clear();
     }
-    unsafe {
-        ALLOC_START = align_address(layout.heap_start + total_page_count * size_of::<Page>())
+
+    let end_of_allocation_table = layout.heap_start + total_page_count * size_of::<Page>();
+    println!(
+        "Allocation Table: {:x} - {:x}",
+        layout.heap_start, end_of_allocation_table
+    );
+
+    let alloc_start = unsafe {
+        ALLOC_START = align_address(end_of_allocation_table);
+        ALLOC_START
     };
+    println!(
+        "Usable Pages: {:x} - {:x}",
+        alloc_start,
+        alloc_start + total_page_count * PAGE_SIZE
+    );
 }
 
 pub fn page_table() -> (&'static mut [Page], usize) {
