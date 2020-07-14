@@ -58,14 +58,18 @@ pub fn print_misa_info() {
     let misa = unsafe { asm_get_misa() };
     let xlen = {
         let mut misa: i64 = misa as i64;
+        // if sign bit is 0, XLEN is 32
         if misa > 0 {
             32
         } else {
-            misa << 1;
+            // shift misa over 1 bit to check next-highest bit
+            misa = misa << 1;
+            // if new sign bit is 0, XLEN is 64
             if misa > 0 {
-                128
-            } else {
                 64
+            } else {
+                // both high bits are 1, so xlen is 128
+                128
             }
         }
     };
@@ -95,20 +99,19 @@ pub fn print_misa_info() {
             println!("{}", desc);
         }
     }
-    println!("----------------");
 }
 
 fn get_base_width() -> u64 {
     let mut test: u64 = 4;
-    test << 31;
+    test = test << 31;
     if test == 0 {
         return 32;
     }
-    test << 31;
+    test = test << 31;
     if test > 0 {
-        return 64;
+        return 128;
     }
-    return 128;
+    return 64;
 }
 
 fn set_trap_vector(address: usize) {
