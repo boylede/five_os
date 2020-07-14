@@ -71,10 +71,10 @@ pub fn kmalloc(size: usize) -> *mut u8 {
 
     // local variable will be used to walk through the kernel memory space
     // one allocation at a time
-    let mut head = unsafe {KMEM_HEAD};
-    let mut current_allocation = unsafe {head.as_mut()}.unwrap();
+    let mut head = unsafe { KMEM_HEAD };
+    let mut current_allocation = unsafe { head.as_mut() }.unwrap();
     // local variable to compare to head while walking kernel memory
-    let tail = unsafe {(head as *mut u8).add(KMEM_ALLOC * PAGE_SIZE)} as *mut AllocList;
+    let tail = unsafe { (head as *mut u8).add(KMEM_ALLOC * PAGE_SIZE) } as *mut AllocList;
     while head < tail {
         if current_allocation.is_free() && size <= current_allocation.get_size() {
             // split this chunk and return
@@ -85,7 +85,11 @@ pub fn kmalloc(size: usize) -> *mut u8 {
             // so just take the whole chunk in that case
             if remainder >= size_of::<AllocList>() + 8 {
                 // split the chunk
-                let next = unsafe {((head as *mut u8).add(size) as *mut AllocList).as_mut().unwrap()};
+                let next = unsafe {
+                    ((head as *mut u8).add(size) as *mut AllocList)
+                        .as_mut()
+                        .unwrap()
+                };
                 next.clear();
                 next.set_free();
                 next.set_size(remainder);
@@ -95,14 +99,13 @@ pub fn kmalloc(size: usize) -> *mut u8 {
                 current_allocation.set_size(chunk_size);
             }
             // offset pointer by size of the metadata and coerce to general pointer
-            return unsafe {head.add(1)} as *mut u8;
-
+            return unsafe { head.add(1) } as *mut u8;
         } else {
             // go to next chunk
-            head = unsafe {(head as *mut u8).add(current_allocation.get_size())} as *mut AllocList;
-            current_allocation = unsafe {head.as_mut()}.unwrap();
+            head =
+                unsafe { (head as *mut u8).add(current_allocation.get_size()) } as *mut AllocList;
+            current_allocation = unsafe { head.as_mut() }.unwrap();
         }
-        
     }
     // failed to allocate any memory, return null pointer
     null_mut()
