@@ -129,6 +129,7 @@ pub fn setup_trap() {
 }
 
 pub fn inspect_trap_vector() {
+    println!("----------- Trap --------------");
     let mtvec = unsafe { asm_get_mtvec() };
     if mtvec == 0 {
         println!("trap vector not initialized");

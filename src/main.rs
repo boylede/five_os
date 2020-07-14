@@ -17,12 +17,13 @@ extern "C" fn kmain() {
     cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
     layout::layout_sanity_check();
-    cpu_status::setup_trap();
-    cpu_status::inspect_trap_vector();
-
     mmu::test();
     page::setup();
     kmem::setup();
+    page::alloc(64);
+    page::alloc(1);
+
+    page::print_page_table();
     println!("reached end");
     abort();
 }
