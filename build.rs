@@ -6,11 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let asm_dir = PathBuf::from(r"./src/assembly");
 
     println!("cargo:rustc-link-search=linker/");
-    let assembly_files = vec![
-        "boot.s",
-        "trap.s",
-        "cpu.s",
-        ];
+    let assembly_files = vec!["boot.s", "trap.s", "cpu.s"];
 
     let mut builder = Build::new();
 
@@ -19,6 +15,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         builder.file(filename);
         // println!("cargo:rerun-if-changed={}", filename);
     }
+
     builder.compile("asm");
 
     Ok(())

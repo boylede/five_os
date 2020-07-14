@@ -1,17 +1,15 @@
 use crate::layout::StaticLayout;
-use crate::page::{PAGE_SIZE, align_address};
+use crate::page::{align_address, PAGE_SIZE};
 use crate::{print, println};
 
-mod thirty_two;
 mod thirty_nine;
+mod thirty_two;
 
-pub use thirty_two::Sv32Table;
 pub use thirty_nine::Sv39Table;
+pub use thirty_two::Sv32Table;
 
 /// Abstraction over any MMU-backed page table type
 pub struct PageTable(Page);
-
-
 
 pub enum TableTypes {
     Sv32(Sv32Table),
@@ -31,11 +29,10 @@ pub enum PermFlags {
     ReadExecute = 0b101,
 }
 
-
 /// Placeholder for the 2 software-defined bits allowed in the mmu's page table entries
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
-pub struct SoftFlags (u8);
+pub struct SoftFlags(u8);
 
 /// Trait for describing MMU-backed page table entries. Each page-table mode (Sv32, Sv39,
 /// Sv48, etc) provides an implementation. Code outside of this module should not need to
@@ -49,12 +46,19 @@ trait PtEntry {
     /// Inserts the given address, sets valid bit, sets permissions, and clears other bits
     fn put_entry(&mut self, physical: usize, permissions: PermFlags);
     /// Clears the entry and sets each parameter, as well as the valid flag. Clears reserved bits.
-    fn set(&mut self, permissions: PermFlags, user: bool, global: bool, soft: SoftFlags, physical: usize);
+    fn set(
+        &mut self,
+        permissions: PermFlags,
+        user: bool,
+        global: bool,
+        soft: SoftFlags,
+        physical: usize,
+    );
     /// Returns current software flags state
     fn software_flags(&self) -> SoftFlags;
     /// Allows the software bits to be set
     fn set_software(&mut self, value: SoftFlags);
-    /// Checks if this is considered a leaf entry 
+    /// Checks if this is considered a leaf entry
     fn leaf(&self) -> bool;
     fn descend(&self, virt: usize) -> &mut Self::Entry;
 }

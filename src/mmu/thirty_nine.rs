@@ -1,4 +1,3 @@
-
 use crate::mmu::PAGE_SIZE;
 
 pub struct Sv39Entry(u64);

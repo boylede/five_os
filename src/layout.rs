@@ -129,5 +129,4 @@ pub fn layout_sanity_check() {
         l.heap_start + l.heap_size,
         l.heap_size
     );
-    
 }
