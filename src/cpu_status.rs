@@ -120,8 +120,7 @@ fn set_trap_vector(address: usize) {
 }
 
 pub fn setup_trap() {
-    let address = StaticLayout::new().trap_vector;
-    println!("trap is located at: {:x}", address);
+    let address = StaticLayout::get().trap_vector;
     let mask = address & 0b11;
     if mask != 0 {
         panic!("Trap vector not aligned to 4-byte boundary: {:x}", address);

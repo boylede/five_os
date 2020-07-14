@@ -19,8 +19,13 @@ extern "C" {
     static asm_trap_vector: usize;
 }
 
+static mut LAYOUT: Option<StaticLayout> = None;
+
 /// Allows access to the global addresses PROVIDE'd in the linker map. The main reason for this structure
-/// to exist is that Rust does not allow one to convert a pointer to an integer in a compile-time const.
+/// to exist is that since the locations are provided from assembly/the linker, rustc does not know the
+/// addresses at compile-time so we get them at runtime instead. We could do the binding-to-address transformation
+/// as .data in the assembly output, but this way allows safe rust access to the values without a bunch of
+/// extern "c" accesses throughout the codebase.
 pub struct StaticLayout {
     pub text_start: usize,
     pub trap_start: usize,
@@ -45,7 +50,8 @@ pub struct StaticLayout {
 impl StaticLayout {
     /// creates a stack-allocated structure with all of the addresses of areas in memory.
     /// # Unsafe
-    /// Accessing a global defined outside rust is unsafe, therefor this function makes heavy use of unsafe. We also convery those addresses (pointers) to integers.
+    /// Accessing a global defined outside rust is unsafe, therefor this function makes
+    /// heavy use of unsafe. We also convert those addresses (pointers) to integers.
     pub fn new() -> StaticLayout {
         StaticLayout {
             text_start: unsafe { &_text_start as *const _ } as usize,
@@ -68,26 +74,60 @@ impl StaticLayout {
             trap_vector: unsafe { &asm_trap_vector as *const _ } as usize,
         }
     }
+    /// Provides a static singleton of the layout
+    pub fn get() -> &'static StaticLayout {
+        unsafe {
+            if let None = LAYOUT {
+                LAYOUT = Some(StaticLayout::new());
+            }
+            LAYOUT.as_ref().unwrap()
+        }
+    }
 }
 
 #[macro_use]
 use crate::{print, println};
 
 pub fn layout_sanity_check() {
-    let l = StaticLayout::new();
-    unsafe {
-        println!("text: {:x} - {:x}", l.text_start, l.text_end);
-        println!("\ttrap: {:x} - {:x}", l.trap_start, l.trap_end);
-        println!("global: {:x}", l.global_pointer);
-        println!("rodata: {:x} - {:x}", l.rodata_start, l.rodata_end);
-        println!("data: {:x} - {:x}", l.data_start, l.data_end);
-        println!("bss: {:x} - {:x}", l.bss_start, l.bss_end);
-        println!("physical memory: {:x} - {:x}", l.memory_start, l.memory_end);
-        println!("\tstack: {:x} - {:x}", l.stack_start, l.stack_end);
-        println!(
-            "\theap: {:x} - {:x}",
-            l.heap_start,
-            l.heap_start + l.heap_size
-        );
-    }
+    println!("----------- Static Layout ---------------");
+    let l = StaticLayout::get();
+    println!(
+        "text:\t{:x} - {:x}\t{}-bytes",
+        l.text_start,
+        l.text_end,
+        l.text_end - l.text_start
+    );
+    println!(" trap:\t{:x} - {:x}", l.trap_start, l.trap_end);
+    println!("global:\t{:x}", l.global_pointer);
+    println!(
+        "rodata:\t{:x} - {:x}\t{}-bytes",
+        l.rodata_start,
+        l.rodata_end,
+        l.rodata_end - l.rodata_start
+    );
+    println!(
+        "data:\t{:x} - {:x}\t{}-bytes",
+        l.data_start,
+        l.data_end,
+        l.data_end - l.data_start
+    );
+    println!(
+        "bss:\t{:x} - {:x}\t{}-bytes",
+        l.bss_start,
+        l.bss_end,
+        l.bss_end - l.bss_start
+    );
+    println!(
+        " stack:\t{:x} - {:x}\t{}-bytes",
+        l.stack_start,
+        l.stack_end,
+        l.stack_end - l.stack_start
+    );
+    println!(
+        " heap:\t{:x} - {:x}\t{}-bytes",
+        l.heap_start,
+        l.heap_start + l.heap_size,
+        l.heap_size
+    );
+    
 }
