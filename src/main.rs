@@ -11,8 +11,6 @@ mod page;
 mod trap;
 mod uart;
 
-use mmu::Sv39Table;
-
 #[no_mangle]
 extern "C" fn kmain() {
     logo::print_logo();

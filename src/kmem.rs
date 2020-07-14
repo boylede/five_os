@@ -1,7 +1,8 @@
+use crate::mmu::PageTable;
+use crate::page::{align_power, zalloc, PAGE_SIZE};
+
 /// Allocates memory for the kernel.
 use core::{mem::size_of, ptr::null_mut};
-use crate::page::{zalloc, PAGE_SIZE, align_power};
-use crate::mmu::PageTable;
 
 /// Number of pages allocated for kernel use
 static mut KMEM_ALLOC: usize = 0;
