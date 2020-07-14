@@ -18,7 +18,7 @@ struct AllocList {
     flags_size: u64,
 }
 
-const TAKEN_BIT: u64 = (1<<63);
+const TAKEN_BIT: u64 = 1 << 63;
 
 impl AllocList {
     pub fn is_taken(&self) -> bool {
@@ -47,7 +47,6 @@ impl AllocList {
     }
 }
 
-
 pub fn setup() {
     unsafe {
         KMEM_ALLOC = 512;
@@ -61,7 +60,7 @@ pub fn setup() {
     }
 }
 
-pub fn kzmalloc(size: usize) -> *mut u8 {
+pub fn kzmalloc(_size: usize) -> *mut u8 {
     unimplemented!()
 }
 
@@ -69,7 +68,7 @@ pub fn kmalloc(size: usize) -> *mut u8 {
     // scale the size to 8-byte boundaries (lowest three bits zero)
     // and add space required to store metadata
     let size = align_power(size, 3) + size_of::<AllocList>();
-    
+
     // local variable will be used to walk through the kernel memory space
     // one allocation at a time
     let mut head = unsafe {KMEM_HEAD};

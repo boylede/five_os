@@ -181,7 +181,7 @@ impl Satp {
             _ => unimplemented!(),
         }
     }
-    pub fn set_asid(&mut self, value: u16) {
+    pub fn set_asid(&mut self, _value: u16) {
         unimplemented!()
     }
     pub fn raw(self) -> usize {
