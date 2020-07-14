@@ -27,8 +27,6 @@ pub const fn align_power(address: usize, power: usize) -> usize {
     (address + mask) & !mask
 }
 
-
-
 pub struct Page {
     flags: Pageflags,
 }
@@ -143,31 +141,46 @@ pub fn zalloc(count: usize) -> *mut u8 {
     page as *mut u8
 }
 
-pub fn print_page_table(table: &[Page]) {
-    let layout = StaticLayout::new();
-    let heap_size = layout.heap_size;
-    let heap_start = layout.heap_start;
-    let total_page_count = heap_size / PAGE_SIZE;
-    assert!(total_page_count > 0);
-    let mut begining = heap_start as *const Page;
-    let end = unsafe { begining.add(total_page_count) };
-    let allocation_beginning = unsafe { ALLOC_START };
-    let allocation_end = allocation_beginning + total_page_count * PAGE_SIZE;
-
-    println!();
-    println!("Page Allocation Table");
-    println!("Meta: {:p} - {:p}", begining, end);
-    println!(
-        "Phys: {:#04x} - {:#04x}",
-        allocation_beginning, allocation_end
-    );
-    println!("----------------------------------------");
-    let mut index = 0;
-    while begining < end {
-        if (unsafe { begining.as_ref().unwrap() }).is_taken() {
-            //
+pub fn print_page_table() {
+    println!("----------- Page Table --------------");
+    let (page_table, page_count) = page_table();
+    {
+        let start = ((page_table as *const _) as *const Page) as usize;
+        let end = start + page_count * size_of::<Page>();
+        println!("Alloc Table:\t{:x} - {:x}", start, end);
+    }
+    {
+        let alloc_start = unsafe { ALLOC_START };
+        let alloc_end = alloc_start + page_count * PAGE_SIZE;
+        println!("Usable Pages:\t{:x} - {:x}", alloc_start, alloc_end);
+    }
+    println!("   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+    let mut middle = false;
+    let mut start = 0;
+    for page in page_table.iter_mut() {
+        if page.is_taken() {
+            if !middle {
+                let page_address = alloc_table_entry_to_page_address(page);
+                print!("{:x} => ", page_address);
+                middle = true;
+                start = page_address;
+            }
+            if page.is_last() {
+                let page_address = alloc_table_entry_to_page_address(page) + PAGE_SIZE - 1;
+                let size = (page_address - start) / PAGE_SIZE;
+                println!("{:x}: {} page(s).", page_address, size + 1);
+                middle = false;
+            }
         }
     }
+    println!("   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+    {
+        let used = page_table.iter().filter(|page| page.is_taken()).count();
+        println!("Allocated pages: {} = {} bytes", used, used * PAGE_SIZE);
+        let free = page_count - used;
+        println!("Free pages: {} = {} bytes", free, free * PAGE_SIZE);
+    }
+    println!("----------------------------------------");
 }
 
 /// Setup the kernel's page table to keep track of allocations.
