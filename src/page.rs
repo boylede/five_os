@@ -211,7 +211,7 @@ pub fn setup() {
 }
 
 pub fn page_table() -> (&'static mut [Page], usize) {
-    let layout = StaticLayout::new();
+    let layout = StaticLayout::get();
     let heap_start = { layout.heap_start as *mut Page };
     let count = layout.heap_size / PAGE_SIZE;
     let table = unsafe { core::slice::from_raw_parts_mut(heap_start, count) };
@@ -220,6 +220,18 @@ pub fn page_table() -> (&'static mut [Page], usize) {
 
 pub fn address_to_page_index(address: *mut u8) -> usize {
     assert!(!address.is_null());
-    let alloc_start = unsafe {ALLOC_START};
+    let alloc_start = unsafe { ALLOC_START };
     (address as usize - alloc_start) / PAGE_SIZE
+}
+
+pub fn page_index_to_address(index: usize) -> usize {
+    let alloc_start = unsafe { ALLOC_START };
+    (index * PAGE_SIZE) + alloc_start
+}
+
+pub fn alloc_table_entry_to_page_address(entry: &mut Page) -> usize {
+    let alloc_start = unsafe { ALLOC_START };
+    let heap_start = StaticLayout::get().heap_start;
+    let page_entry = (entry as *mut _) as usize;
+    alloc_start + (page_entry - heap_start) * PAGE_SIZE
 }
