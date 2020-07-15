@@ -8,9 +8,9 @@ mod forty_eight;
 mod thirty_nine;
 mod thirty_two;
 
-pub use forty_eight::SV_FORTY_EIGHT;
-pub use thirty_nine::SV_THIRTY_NINE;
-pub use thirty_two::SV_THIRTY_TWO;
+use forty_eight::SV_FORTY_EIGHT;
+use thirty_nine::SV_THIRTY_NINE;
+use thirty_two::SV_THIRTY_TWO;
 
 extern "C" {
     fn asm_get_satp() -> usize;
@@ -73,7 +73,7 @@ pub enum PageSize {
     TeraPage,
 }
 
-pub struct PageTableDescriptor {
+struct PageTableDescriptor {
     /// the size of the page table, in bytes (always 4096)
     size: usize,
     /// the number of levels of page tables

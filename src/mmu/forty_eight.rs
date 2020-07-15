@@ -1,6 +1,6 @@
 use crate::mmu::{BitGroup, PageTableDescriptor};
 
-pub const SV_FORTY_EIGHT: PageTableDescriptor = PageTableDescriptor {
+pub(super) const SV_FORTY_EIGHT: PageTableDescriptor = PageTableDescriptor {
     size: PAGESIZE,
     levels: LEVELS,
     entry_size: PTESIZE,
