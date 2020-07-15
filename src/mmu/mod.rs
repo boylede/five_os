@@ -4,9 +4,11 @@ use crate::layout::StaticLayout;
 use crate::page::{align_address, zalloc, PAGE_SIZE};
 use crate::{print, println};
 
+mod forty_eight;
 mod thirty_nine;
 mod thirty_two;
 
+pub use forty_eight::SV_FORTY_EIGHT;
 pub use thirty_nine::SV_THIRTY_NINE;
 pub use thirty_two::SV_THIRTY_TWO;
 
@@ -68,6 +70,7 @@ pub enum PageSize {
     Page,
     Megapage,
     GigaPage,
+    TeraPage,
 }
 
 pub struct PageTableDescriptor {
@@ -227,7 +230,7 @@ pub fn translate_address(page_table: &PageTable, virtual_address: usize) -> usiz
             None => virtual_address,
             Sv32 => traverse_root(page_table, virtual_address, &SV_THIRTY_TWO),
             Sv39 => traverse_root(page_table, virtual_address, &SV_THIRTY_NINE),
-            Sv48 => unimplemented!(),
+            Sv48 => traverse_root(page_table, virtual_address, &SV_FORTY_EIGHT),
         }
     }
 }
