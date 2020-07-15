@@ -145,7 +145,7 @@ pub fn inspect_trap_vector() {
     };
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Satp(usize);
 
 impl Satp {
@@ -153,6 +153,11 @@ impl Satp {
         let address = crate::page::align_address(address);
         let satp = address >> 12;
         Satp(satp)
+    }
+    pub fn from(address: usize, mode: u8) -> Self {
+        let mut base = Self::from_address(address);
+        base.set_mode(mode);
+        base
     }
     pub fn address(&self) -> usize {
         (self.0 & (1 << 21) - 1) << 12
@@ -187,6 +192,9 @@ impl Satp {
     }
     pub fn raw(self) -> usize {
         self.0
+    }
+    pub fn from_raw(raw: usize) -> Satp {
+        Satp(raw)
     }
 }
 
