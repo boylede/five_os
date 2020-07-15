@@ -11,6 +11,10 @@ static mut KMEM_HEAD: *mut AllocList = null_mut();
 /// MMU page table for kernel
 static mut KMEM_PAGE_TABLE: *mut PageTable = null_mut();
 
+pub fn get_page_table() -> &'static mut PageTable {
+    unsafe { KMEM_PAGE_TABLE.as_mut().unwrap() }
+}
+
 /// An AllocList stores the size and status of the following sequence of bytes
 /// another AllocList can be expected at alloc_list.add(size) bytes later;
 /// these will be placed in allocated pages to subdvide them into memory regions
