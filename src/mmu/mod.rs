@@ -85,10 +85,16 @@ pub struct SoftFlags(u8);
 #[repr(u8)]
 #[derive(Clone, Copy)]
 pub enum PageSize {
-    Page,
-    Megapage,
-    GigaPage,
-    TeraPage,
+    Page = 0,
+    Megapage = 1,
+    GigaPage = 2,
+    TeraPage = 3,
+}
+
+impl PageSize {
+    pub fn to_level(&self) -> usize {
+        *self as usize
+    }
 }
 
 struct PageTableDescriptor {
