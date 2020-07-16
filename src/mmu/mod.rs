@@ -55,6 +55,18 @@ pub struct EntryFlags {
     global: bool,
 }
 
+impl EntryFlags {
+    /// Puts each bitflag into the lower 9 bits of a usize,
+    /// ready for insertion into any type of page table entry
+    /// also sets valid flag
+    pub fn to_entry(&self) -> usize {
+        0b1 | // set valid bit
+        (self.permissions as usize) << 1 |
+        (self.user as usize) << 4 | 
+        (self.global as usize) << 5
+    }
+}
+
 /// Permissions flags in a page table entry.
 #[derive(Clone, Copy)]
 pub enum PermFlags {
