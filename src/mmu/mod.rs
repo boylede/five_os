@@ -26,6 +26,12 @@ static mut PAGE_TABLE_TYPE: TableTypes = TableTypes::Sv39;
 #[repr(transparent)]
 pub struct PageTable(Page);
 
+impl PageTable {
+    pub fn entry(&mut self, index: usize, size: usize) -> *mut usize {
+        ((&mut (self.0).0[index * size]) as *mut _) as *mut usize
+    }
+}
+
 /// The different types of page tables possible in Riscv
 /// for both 32 bit and 64bit systems
 #[derive(PartialEq, Eq, Copy, Clone)]
