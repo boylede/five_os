@@ -78,9 +78,32 @@ pub enum PermFlags {
 }
 
 /// Placeholder for the 2 software-defined bits allowed in the mmu's page table entries
-#[repr(transparent)]
 #[derive(Clone, Copy, Default)]
 pub struct SoftFlags(u8);
+
+impl SoftFlags {
+    fn set(&mut self, value: u8) {
+        self.0 = value & 0b11;
+    }
+    fn get(&self) -> u8 {
+        self.0
+    }
+    fn clear(&mut self) {
+        self.0 = 0
+    }
+    fn set_a(&mut self) {
+        self.0 |= 0b01
+    }
+    fn set_b(&mut self) {
+        self.0 |= 0b10
+    }
+    fn get_a(&mut self) -> bool {
+        self.0 & 0b01 == 0b01
+    }
+    fn get_b(&mut self) -> bool{
+        self.0 & 0b10 == 0b10
+    }
+}
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
