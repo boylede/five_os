@@ -143,9 +143,10 @@ fn traverse(
     descriptor: &PageTableDescriptor,
 ) -> usize {
     // decompose page table descriptor
-    let (pte_size, vpn_segments, ppn_segments, pa_segments, levels) = {
+    let (table_size, pte_size, vpn_segments, ppn_segments, pa_segments, levels) = {
         let d = descriptor;
         (
+            d.size,
             d.entry_size,
             d.virtual_segments,
             d.page_segments,
