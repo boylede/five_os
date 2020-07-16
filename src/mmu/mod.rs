@@ -248,6 +248,18 @@ fn is_executable(entry: &usize) -> bool {
     *entry & 0b1000 == 0b1000
 }
 
+/// produce a page table entry based on the provided descriptor,
+/// permissions bits, and software bits, and sets valid bit
+fn create_entry(address: usize, flags: EntryFlags, descriptor: &PageTableDescriptor) -> usize {
+    // put_bits(address, &mut entry, from_segment: &(usize, usize), &descriptor.page_segments);
+    let mut bits = 0;
+    for level in 0..descriptor.levels {
+        let (bit_width, offset) = descriptor.page_segments[level];
+        let mask = ((1 << bit_width) - 1) << offset;
+        bits = (address << offset) & mask;
+    }
+    bits | flags.to_entry()
+}
 pub fn translate_address(page_table: &PageTable, virtual_address: usize) -> usize {
     unsafe {
         use TableTypes::*;
