@@ -11,8 +11,24 @@ static mut KMEM_HEAD: *mut AllocList = null_mut();
 /// MMU page table for kernel
 static mut KMEM_PAGE_TABLE: *mut PageTable = null_mut();
 
+/// Safe wrapper around page table global
 pub fn get_page_table() -> &'static mut PageTable {
-    unsafe { KMEM_PAGE_TABLE.as_mut().unwrap() }
+    unsafe {
+    // SAFETY: we are converting a mutable pointer to a mutable reference,
+    // we need to ensure that the pointer is null, or all of the following
+    // are true of the memory location & range:
+    // a) initialized, b) valid for PageTable, c) properly aligned for
+    // PageTable, d) non-null, e) contain a single allocated object f) no
+    // other access to this location occurs during the lifetime
+    // of the mutable reference we are creating.
+    // a: page table was zero'd when allocated
+    // b: global symbol is the correct size, alignment for pagetable as the pointer was declared with this same type
+    // c: same
+    // d: non-null per a
+    // e: does not overlap with any other object, as we ensure through our page-grained allocation
+    // f: we will ensure single access in the future
+        KMEM_PAGE_TABLE.as_mut().unwrap()
+    }
 }
 
 /// An AllocList stores the size and status of the following sequence of bytes
@@ -53,6 +69,10 @@ impl AllocList {
 
 pub fn setup() {
     unsafe {
+        // SAFETY: We are writing to static globals, which requires that
+        // we ensure exclusive access. currently, we only write these
+        // items once at startup and then they are immutable. in the
+        // future, we can add some protection.
         KMEM_ALLOC = 512;
         let k_alloc = zalloc(KMEM_ALLOC);
         assert!(!k_alloc.is_null());
@@ -75,8 +95,16 @@ pub fn kmalloc(size: usize) -> *mut u8 {
 
     // local variable will be used to walk through the kernel memory space
     // one allocation at a time
-    let mut head = unsafe { KMEM_HEAD };
-    let mut current_allocation = unsafe { head.as_mut() }.unwrap();
+    let mut head = unsafe { 
+        // SAFETY: access to static global, 
+        // we must ensure no one has mutable access to head
+        // currently, we treat all the KMEM_ globals as only mutable during setup.
+        KMEM_HEAD 
+    };
+    let mut current_allocation = unsafe {
+        // SAFETY: 
+        head.as_mut()
+    }.unwrap();
     // local variable to compare to head while walking kernel memory
     let tail = unsafe { (head as *mut u8).add(KMEM_ALLOC * PAGE_SIZE) } as *mut AllocList;
     while head < tail {
