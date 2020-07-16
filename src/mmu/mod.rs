@@ -128,7 +128,26 @@ fn traverse(
 
     // 2) let pte be the value of the page table entry at address a + va.vpn[i]*PTESIZE
     let va_vpni = extract_bits(virtual_address, &vpn_segments[level]);
-    let pte: &usize = unsafe { ((a + va_vpni * pte_size) as *const usize).as_ref().unwrap() };
+    let pte: &usize = unsafe {
+        // SAFETY: we are converting an arbitrary memory address to a usize reference,
+        // so we need to be sure that the memory address is a) initialized,
+        // b) contents valid for usize, c) aligned for usize, and d) no concurrent
+        // access to this address can modify it.
+        // a: this page table was allocated with zalloc, so the memory is known zero, or was written since then by 
+        // b: all initialized memory is valid for integral types
+        // c: the address is aligned for usize because a is aligned for usize,
+        // and the offset (va_vpni) is scaled by pte_size which represents the required alignment
+        // d: we cannot prove this yet, but we are single-threaded at the moment so
+        // when we switch to multi-threaded we will need to protect page tables with a mutex, semaphore or simular structure
+        
+        let entry_offset = va_vpni * pte_size;
+        // check that va_vpni does not push us past the end of the table
+        // this check *should* be redundant because the page table descriptor "vpn_segments"
+        // passed to extract_bits should ensure only values of a limited magnitude can be
+        // returned from that function, but we will check here to be sure
+        assert!(entry_offset <= table_size - pte_size);
+        ((a + entry_offset) as *const usize).as_ref().unwrap()
+    };
     // 3) if page table valid bit not set, or if read/write bits set inconsistently, stop
     if !is_valid(pte) || is_invalid(pte) {
         panic!("invalid page table entry");
@@ -164,16 +183,22 @@ fn traverse(
         if level == 0 {
             panic!("invalid page table entry");
         }
-        let ppn_descriptor: BitGroup = {
-            let mut size = 0;
-            for group in ppn_segments {
-                let (gsize, _) = group;
-                size += gsize;
-            }
-            (size, ppn_segments[0].1)
+        // combine all ppn segments from the page table entry descriptor
+        let ppn_descriptor: BitGroup = collapse_descriptor(ppn_segments);
+
+        let next_table = extract_bits(*pte, &ppn_descriptor) << 12;
+        let next_table = unsafe {
+            // SAFETY: we are converting an arbitrary usize to a PageTable reference, so we need
+            // to be sure that the memory address is a) initialized, b) contents valid
+            // for PageTable, c) aligned for PageTable, and d) no concurrent access to this
+            // address can modify it.
+            // a: page tables are created with zalloc, so are always initialized
+            // b: PageTable is an array of integral types, with total size equal to a memory
+            // page, since the page was zero'd and since initialized memory is valid for all integral types, we are valid for PageTable
+            // c: we are shifting the output of extract_bits by 12, which ensures that the low 12 bits are zero, as required
+            // d: again, this will need to be protected by a mutex or semaphore, once we add support for multiple cores
+            (next_table as *const PageTable).as_ref().unwrap()
         };
-        let next_table = extract_bits(*pte, &ppn_descriptor) >> 12;
-        let next_table = unsafe { (next_table as *const PageTable).as_ref().unwrap() };
         traverse(next_table, virtual_address, level - 1, descriptor)
     }
 }
