@@ -116,6 +116,15 @@ struct PageTableDescriptor {
 /// of bits and offset is the bit address of the lowest bit in the group.
 type BitGroup = (usize, usize);
 
+fn collapse_descriptor(segments: &[BitGroup]) -> BitGroup {
+    let mut size = 0;
+    for group in segments {
+        let (gsize, _) = group;
+        size += gsize;
+    }
+    (size, segments[0].1)
+}
+
 fn traverse_root(
     table: &PageTable,
     virtual_address: usize,
