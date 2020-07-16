@@ -293,6 +293,114 @@ fn create_entry(address: usize, flags: EntryFlags, descriptor: &PageTableDescrip
     }
     bits | flags.to_entry()
 }
+
+pub fn map_address(
+    root: &mut PageTable,
+    virtual_address: usize,
+    physical_address: usize,
+    flags: EntryFlags,
+    page_size: PageSize,
+) {
+    unsafe {
+        use TableTypes::*;
+        match PAGE_TABLE_TYPE {
+            None => (),
+            Sv32 => map_root(
+                root,
+                virtual_address,
+                physical_address,
+                flags,
+                page_size,
+                &SV_THIRTY_TWO,
+            ),
+            Sv39 => map_root(
+                root,
+                virtual_address,
+                physical_address,
+                flags,
+                page_size,
+                &SV_THIRTY_NINE,
+            ),
+            Sv48 => map_root(
+                root,
+                virtual_address,
+                physical_address,
+                flags,
+                page_size,
+                &SV_FORTY_EIGHT,
+            ),
+        }
+    }
+}
+
+fn map_root(
+    table: &mut PageTable,
+    virtual_address: usize,
+    physical_address: usize,
+    flags: EntryFlags,
+    page_size: PageSize,
+    descriptor: &PageTableDescriptor,
+) {
+    map(
+        table,
+        virtual_address,
+        physical_address,
+        flags,
+        page_size,
+        descriptor.levels - 1,
+        descriptor,
+    )
+}
+
+fn map(
+    table: &mut PageTable,
+    virtual_address: usize,
+    physical_address: usize,
+    flags: EntryFlags,
+    page_size: PageSize,
+    level: usize,
+    descriptor: &PageTableDescriptor,
+) {
+    let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
+    let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
+    
+    
+    let entry: *mut usize = table.entry(vpn, descriptor.entry_size);
+    let entry = unsafe {entry.as_mut().unwrap()};
+    if page_size.to_level() < level {
+        if level == 0 {
+            // this check should never fail, todo: check if avoidable
+            panic!("Invalid map attempt");
+        }
+        if !is_valid(entry) {
+            // check if this entry is valid
+            // if not, zalloc a page to store the next page table
+            // set this page table's entry value to the address of that table
+            // and recurse into that table
+            let new_page = zalloc(1);
+            let new_entry = create_entry(new_page as usize, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
+            *entry = new_entry;
+            let next_table = unsafe {(new_page as *mut PageTable).as_mut().unwrap()};
+            map(next_table, virtual_address, physical_address, flags, page_size, level - 1, descriptor);
+        } else {
+            // this entry is valid, extract the next page table address from it and recurse
+            let page = extract_bits(*entry, &descriptor.page_segments[level]) << 12;
+            let next_table = unsafe {(page as *mut PageTable).as_mut().unwrap()};
+            map(next_table, virtual_address, physical_address, flags, page_size, level - 1, descriptor);
+        }
+    } else if page_size.to_level() == level {
+        if is_valid(entry) {
+            panic!("attempt to overwrite page table entry");
+        }
+        // when we reach this point, we are ready to write the leaf entry
+        let new_entry = create_entry(physical_address, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
+        *entry = new_entry;
+    } else {
+        // we should never be able to reach here, sanity check
+        panic!("shouldn't be here");
+    }
+}
+
 pub fn translate_address(page_table: &PageTable, virtual_address: usize) -> usize {
     unsafe {
         use TableTypes::*;
