@@ -214,7 +214,7 @@ pub fn print_cpu_info() {
     println!("--- CPU INFO ---");
     println!("Vendor: {:x}", vendor);
     println!("Architecture: {:x}", architecture);
-    println!("Implementaton: {:x}", implementation);
+    println!("Implementation: {:x}", implementation);
 }
 
 pub fn print_trap_info() {
