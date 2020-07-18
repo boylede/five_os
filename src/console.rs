@@ -81,8 +81,8 @@ impl Console {
             if let Some(c) = self.inner.get() {
                 match c {
                     8 => {
-                        print!("{}{}{}", 8 as char, ' ', 8 as char);
-                        self.buffer.set(' ' as u8);
+                        print!("{} {}", 8 as char, 8 as char);
+                        self.buffer.set(b' ');
                     }
                     0x1b => {
                         println!("esc");

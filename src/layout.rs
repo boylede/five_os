@@ -77,7 +77,7 @@ impl StaticLayout {
     /// Provides a static singleton of the layout
     pub fn get() -> &'static StaticLayout {
         unsafe {
-            if let None = LAYOUT {
+            if LAYOUT.is_none() {
                 LAYOUT = Some(StaticLayout::new());
             }
             LAYOUT.as_ref().unwrap()

@@ -1,8 +1,9 @@
+use core::cmp::Ordering;
+
 use crate::cpu_status::Satp;
 use crate::kmem;
-use crate::layout::StaticLayout;
-use crate::page::{align_address, zalloc, PAGE_SIZE};
-use crate::{print, println};
+use crate::page::{zalloc, PAGE_SIZE};
+
 
 mod forty_eight;
 mod thirty_nine;
@@ -281,8 +282,8 @@ fn put_bits(
     let (bit_width, offset) = to_segment;
     let mask = ((1 << bit_width) - 1) << offset;
     bits = (bits << offset) & mask;
-    *to = *to & !mask;
-    *to = *to | bits;
+    *to &= !mask;
+    *to |= bits;
 }
 
 /// check lowest bit is set
@@ -386,43 +387,47 @@ fn map(
     descriptor: &PageTableDescriptor,
 ) {
     let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
-    let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
     
     
     let entry: *mut usize = table.entry(vpn, descriptor.entry_size);
     let entry = unsafe {entry.as_mut().unwrap()};
-    if page_size.to_level() < level {
-        if level == 0 {
-            // this check should never fail, todo: check if avoidable
-            panic!("Invalid map attempt");
-        }
-        if !is_valid(entry) {
-            // check if this entry is valid
-            // if not, zalloc a page to store the next page table
-            // set this page table's entry value to the address of that table
-            // and recurse into that table
-            let new_page = zalloc(1);
-            let new_entry = create_entry(new_page as usize, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
+
+    match page_size.to_level().cmp(&level) {
+        Ordering::Equal => {
+            if is_valid(entry) {
+                panic!("attempt to overwrite page table entry");
+            }
+            // when we reach this point, we are ready to write the leaf entry
+            let new_entry = create_entry(physical_address, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
             *entry = new_entry;
-            let next_table = unsafe {(new_page as *mut PageTable).as_mut().unwrap()};
-            map(next_table, virtual_address, physical_address, flags, page_size, level - 1, descriptor);
-        } else {
-            // this entry is valid, extract the next page table address from it and recurse
-            let page = extract_bits(*entry, &descriptor.page_segments[level]) << 12;
-            let next_table = unsafe {(page as *mut PageTable).as_mut().unwrap()};
-            map(next_table, virtual_address, physical_address, flags, page_size, level - 1, descriptor);
-        }
-    } else if page_size.to_level() == level {
-        if is_valid(entry) {
-            panic!("attempt to overwrite page table entry");
-        }
-        // when we reach this point, we are ready to write the leaf entry
-        let new_entry = create_entry(physical_address, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
-        *entry = new_entry;
-    } else {
-        // we should never be able to reach here, sanity check
-        panic!("shouldn't be here");
-    }
+        },
+        Ordering::Greater => {
+            // we should never be able to reach here, sanity check
+            panic!("shouldn't be here");
+        },
+        Ordering::Less => {
+            if level == 0 {
+                // this check should never fail, todo: check if avoidable
+                panic!("Invalid map attempt");
+            }
+            if !is_valid(entry) {
+                // check if this entry is valid
+                // if not, zalloc a page to store the next page table
+                // set this page table's entry value to the address of that table
+                // and recurse into that table
+                let new_page = zalloc(1);
+                let new_entry = create_entry(new_page as usize, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
+                *entry = new_entry;
+                let next_table = unsafe {(new_page as *mut PageTable).as_mut().unwrap()};
+                map(next_table, virtual_address, physical_address, flags, page_size, level - 1, descriptor);
+            } else {
+                // this entry is valid, extract the next page table address from it and recurse
+                let page = extract_bits(*entry, &descriptor.page_segments[level]) << 12;
+                let next_table = unsafe {(page as *mut PageTable).as_mut().unwrap()};
+                map(next_table, virtual_address, physical_address, flags, page_size, level - 1, descriptor);
+            }
+        },
+    };
 }
 
 pub fn translate_address(page_table: &PageTable, virtual_address: usize) -> usize {
@@ -438,9 +443,8 @@ pub fn translate_address(page_table: &PageTable, virtual_address: usize) -> usiz
 }
 
 pub fn setup() {
-    let layout = StaticLayout::get();
     let kernel_page_table = kmem::get_page_table();
-    if set_translation_type(TableTypes::Sv39, kernel_page_table) == false {
+    if !set_translation_type(TableTypes::Sv39, kernel_page_table) {
         panic!("address translation not supported on this processor.");
     }
 }
@@ -459,9 +463,5 @@ fn set_translation_type(mode: TableTypes, address: &mut PageTable) -> bool {
     };
     let found = Satp::from_raw(satp);
 
-    if found.raw() == desired.raw() {
-        true
-    } else {
-        false
-    }
+    found.raw() == desired.raw() 
 }

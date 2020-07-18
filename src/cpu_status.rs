@@ -63,7 +63,7 @@ pub fn print_misa_info() {
             32
         } else {
             // shift misa over 1 bit to check next-highest bit
-            misa = misa << 1;
+            misa <<= 1;
             // if new sign bit is 0, XLEN is 64
             if misa > 0 {
                 64
@@ -103,15 +103,18 @@ pub fn print_misa_info() {
 
 fn get_base_width() -> u64 {
     let mut test: u64 = 4;
-    test = test << 31;
+    test <<= 31;
     if test == 0 {
-        return 32;
+        32
+    } else {
+        test <<= 31;
+        if test > 0 {
+            128
+        } else {
+            64
+        }
+        
     }
-    test = test << 31;
-    if test > 0 {
-        return 128;
-    }
-    return 64;
 }
 
 fn set_trap_vector(address: usize) {
@@ -160,7 +163,7 @@ impl Satp {
         base
     }
     pub fn address(&self) -> usize {
-        (self.0 & (1 << 21) - 1) << 12
+        (self.0 & ((1 << 21) - 1)) << 12
     }
     pub fn mode(&self) -> u8 {
         unimplemented!()
@@ -179,10 +182,10 @@ impl Satp {
         match get_base_width() {
             32 => (unimplemented!()),
             64 => {
-                let mut mode: usize = (value & (1 << 4) - 1) as usize;
-                mode = mode << 60;
-                self.0 = self.0 & (1 << 60) - 1;
-                self.0 = self.0 | mode;
+                let mut mode: usize = (value & ((1 << 4) - 1)) as usize;
+                mode <<= 60;
+                self.0 &= (1 << 60) - 1;
+                self.0 |= mode;
             }
             _ => unimplemented!(),
         }

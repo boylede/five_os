@@ -68,17 +68,17 @@ impl Pageflags {
         self.0 >> 2
     }
     pub fn set_taken(&mut self) {
-        self.0 = self.0 | 0b1;
+        self.0 |= 0b1;
     }
     pub fn set_last(&mut self) {
-        self.0 = self.0 | 0b10;
+        self.0 |= 0b10;
     }
     pub fn clear(&mut self) {
         self.0 = 0;
     }
     pub fn set_owner(&mut self, value: u8) {
-        let mut mask = value & (1 << 6) - 1;
-        mask = mask << 2;
+        let mut mask = value & ((1 << 6) - 1);
+        mask <<= 2;
         self.0 = (self.0 & 0b11) | mask;
     }
 }
@@ -123,7 +123,7 @@ pub fn dealloc(page: *mut u8) {
         let page = &mut page_table[page_number];
         if !page.is_last() && page.is_taken() {
             page.clear();
-            page_number = page_number + 1;
+            page_number += 1;
         } else {
             assert!(page.is_last(), "Double free detected");
             page.clear();
