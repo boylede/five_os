@@ -2,8 +2,9 @@ use core::cmp::Ordering;
 
 use crate::cpu_status::Satp;
 use crate::kmem;
-use crate::page::{dealloc, zalloc, PAGE_SIZE};
+use crate::page::{dealloc, zalloc, PAGE_SIZE, PAGE_ADDR_MASK, align_power};
 
+mod entry;
 mod forty_eight;
 mod thirty_nine;
 mod thirty_two;
@@ -11,6 +12,9 @@ mod thirty_two;
 use forty_eight::SV_FORTY_EIGHT;
 use thirty_nine::SV_THIRTY_NINE;
 use thirty_two::SV_THIRTY_TWO;
+
+use entry::EntryFlags;
+use entry::*;
 
 extern "C" {
     fn asm_get_satp() -> usize;
@@ -27,8 +31,14 @@ static mut PAGE_TABLE_TYPE: TableTypes = TableTypes::Sv39;
 pub struct PageTable(Page);
 
 impl PageTable {
-    pub fn entry(&mut self, index: usize, size: usize) -> *mut usize {
-        ((&mut (self.0).0[index * size]) as *mut _) as *mut usize
+    pub fn entry(&self, index: usize, size: usize) -> &Entry {
+        // ((&mut (self.0).0[index * size]) as *mut _) as *mut usize
+        let address = (self as *const PageTable) as usize + (index * size);
+        unsafe { Entry::at_address(address) }
+    }
+    pub fn entry_mut(&mut self, index: usize, size: usize) -> &mut Entry {
+        let address = (self as *mut PageTable) as usize + (index * size);
+        unsafe { Entry::at_address_mut(address) }
     }
 }
 
@@ -47,67 +57,6 @@ pub enum TableTypes {
 
 pub struct Page([u8; PAGE_SIZE]);
 
-#[derive(Clone, Copy)]
-pub struct EntryFlags {
-    permissions: PermFlags,
-    software: SoftFlags,
-    user: bool,
-    global: bool,
-}
-
-impl EntryFlags {
-    /// Puts each bitflag into the lower 9 bits of a usize,
-    /// ready for insertion into any type of page table entry
-    /// also sets valid flag
-    pub fn to_entry(&self) -> usize {
-        0b1 | // set valid bit
-        (self.permissions as usize) << 1 |
-        (self.user as usize) << 4 |
-        (self.global as usize) << 5
-    }
-    pub fn software(&mut self) -> &mut SoftFlags {
-        &mut self.software
-    }
-}
-
-/// Permissions flags in a page table entry.
-#[derive(Clone, Copy)]
-enum PermFlags {
-    Leaf = 0b000,
-    ReadOnly = 0b001,
-    ReadWrite = 0b011,
-    ReadWriteExecute = 0b111,
-    ReadExecute = 0b101,
-}
-
-/// Placeholder for the 2 software-defined bits allowed in the mmu's page table entries
-#[derive(Clone, Copy, Default)]
-pub struct SoftFlags(u8);
-
-impl SoftFlags {
-    fn set(&mut self, value: u8) {
-        self.0 = value & 0b11;
-    }
-    fn get(&self) -> u8 {
-        self.0
-    }
-    fn clear(&mut self) {
-        self.0 = 0
-    }
-    fn set_a(&mut self) {
-        self.0 |= 0b01
-    }
-    fn set_b(&mut self) {
-        self.0 |= 0b10
-    }
-    fn get_a(&mut self) -> bool {
-        self.0 & 0b01 == 0b01
-    }
-    fn get_b(&mut self) -> bool {
-        self.0 & 0b10 == 0b10
-    }
-}
-
 #[repr(u8)]
 #[derive(Clone, Copy)]
 pub enum PageSize {
@@ -123,7 +72,7 @@ impl PageSize {
     }
 }
 
-struct PageTableDescriptor {
+pub(in self) struct PageTableDescriptor {
     /// the size of the page table, in bytes (always 4096)
     size: usize,
     /// the number of levels of page tables
@@ -142,7 +91,7 @@ struct PageTableDescriptor {
 /// of bits and offset is the bit address of the lowest bit in the group.
 type BitGroup = (usize, usize);
 
-fn collapse_descriptor(segments: &[BitGroup]) -> BitGroup {
+pub(in self) fn collapse_descriptor(segments: &[BitGroup]) -> BitGroup {
     let mut size = 0;
     for group in segments {
         let (gsize, _) = group;
@@ -188,7 +137,7 @@ fn traverse(
 
     // 2) let pte be the value of the page table entry at address a + va.vpn[i]*PTESIZE
     let va_vpni = extract_bits(virtual_address, &vpn_segments[level]);
-    let pte: &usize = unsafe {
+    let pte: &Entry = unsafe {
         // SAFETY: we are converting an arbitrary memory address to a usize reference,
         // so we need to be sure that the memory address is a) initialized,
         // b) contents valid for usize, c) aligned for usize, and d) no concurrent
@@ -207,20 +156,22 @@ fn traverse(
         // returned from that function, but we will check here to be sure
         assert!(entry_offset <= table_size - pte_size);
         ((a + entry_offset) as *const usize).as_ref().unwrap()
+        // ((a + entry_offset) as *const usize).as_ref().unwrap()
+        Entry::at_address(a + entry_offset)
     };
     // 3) if page table valid bit not set, or if read/write bits set inconsistently, stop
-    if !is_valid(pte) || is_invalid(pte) {
+    if !pte.is_valid() || pte.is_invalid() {
         panic!("invalid page table entry");
     }
     // 4) now we know the entry is valid, check if it is readable or executable. if not, it is a branch
     // if it is a leaf, proceed to step 5, otherwise decrement i, checking that i wasn't 0 first,
     // and continue from step 2 after setting a to the next page table based on this pte
-    if is_readable(pte) || is_executable(pte) {
+    if pte.is_readable() || pte.is_executable() {
         // 5) pte is a leaf.
         // spec describes checking if the memory access is allowed, but that is for the hardware implementation
         // we will just return the address
         // 6) if i > 0, and the appropriate low bits in the pte are not zeroed, this is misaligned
-        if extract_bits(*pte, &ppn_segments[level]) != 0 {
+        if extract_bits(pte.raw(), &ppn_segments[level]) != 0 {
             panic!("invalid page table entry");
         }
         // 7) this step manages the access and dirty bits in the pte, which is again only relevent to the hardware implementation
@@ -235,7 +186,7 @@ fn traverse(
         }
         // the highest bits of pa.ppn come from the pte (e.g. the bits in sections LEVELS-1 thru i)
         for k in i..levels - 1 {
-            put_bits(*pte, &mut pa, &ppn_segments[k], &pa_segments[k]);
+            put_bits(pte.raw(), &mut pa, &ppn_segments[k], &pa_segments[k]);
         }
         pa
     } else {
@@ -244,9 +195,8 @@ fn traverse(
             panic!("invalid page table entry");
         }
         // combine all ppn segments from the page table entry descriptor
-        let ppn_descriptor: BitGroup = collapse_descriptor(ppn_segments);
 
-        let next_table = extract_bits(*pte, &ppn_descriptor) << 12;
+        // let next_table = extract_bits(pte.raw(), &ppn_descriptor) << 12;
         let next_table = unsafe {
             // SAFETY: we are converting an arbitrary usize to a PageTable reference, so we need
             // to be sure that the memory address is a) initialized, b) contents valid
@@ -257,7 +207,7 @@ fn traverse(
             // page, since the page was zero'd and since initialized memory is valid for all integral types, we are valid for PageTable
             // c: we are shifting the output of extract_bits by 12, which ensures that the low 12 bits are zero, as required
             // d: again, this will need to be protected by a mutex or semaphore, once we add support for multiple cores
-            (next_table as *const PageTable).as_ref().unwrap()
+            pte.child_table(descriptor)
         };
         traverse(next_table, virtual_address, level - 1, descriptor)
     }
@@ -286,52 +236,6 @@ fn put_bits(
     bits = (bits << offset) & mask;
     *to &= !mask;
     *to |= bits;
-}
-
-/// check lowest bit is set
-fn is_valid(entry: &usize) -> bool {
-    *entry & 0b1 == 1
-}
-
-/// checks read & write bits not inconsistant
-fn is_invalid(entry: &usize) -> bool {
-    *entry & 0b10 == 0 && *entry & 0b100 == 0b100
-}
-
-fn invalidate(entry: &mut usize) {
-    *entry = 0;
-}
-
-/// checks bit 1 is set
-fn is_readable(entry: &usize) -> bool {
-    *entry & 0b10 == 0b10
-}
-
-/// checks bit x is set
-fn is_writable(entry: &usize) -> bool {
-    *entry & 0b100 == 0b100
-}
-
-/// checks bit 3 is set
-fn is_executable(entry: &usize) -> bool {
-    *entry & 0b1000 == 0b1000
-}
-
-fn is_branch(entry: &usize) -> bool {
-    is_valid(entry) && !is_readable(entry) && !is_executable(entry) && !is_writable(entry)
-}
-
-/// produce a page table entry based on the provided descriptor,
-/// permissions bits, and software bits, and sets valid bit
-fn create_entry(address: usize, flags: EntryFlags, descriptor: &PageTableDescriptor) -> usize {
-    // put_bits(address, &mut entry, from_segment: &(usize, usize), &descriptor.page_segments);
-    let mut bits = 0;
-    for level in 0..descriptor.levels {
-        let (bit_width, offset) = descriptor.page_segments[level];
-        let mask = ((1 << bit_width) - 1) << offset;
-        bits = (address << offset) & mask;
-    }
-    bits | flags.to_entry()
 }
 
 pub fn map_address(
@@ -404,17 +308,16 @@ fn map(
     let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
     // let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
 
-    let entry: *mut usize = table.entry(vpn, descriptor.entry_size);
-    let entry = unsafe { entry.as_mut().unwrap() };
+    let entry: &mut Entry = table.entry_mut(vpn, descriptor.entry_size);
 
     match page_size.to_level().cmp(&level) {
         Ordering::Equal => {
-            if is_valid(entry) {
+            if entry.is_valid() {
                 panic!("attempt to overwrite page table entry");
             }
             // when we reach this point, we are ready to write the leaf entry
-            let new_entry = create_entry(physical_address, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
-            *entry = new_entry;
+
+            entry.set_with(physical_address, flags, descriptor);
         }
         Ordering::Greater => {
             // we should never be able to reach here, sanity check
@@ -425,14 +328,13 @@ fn map(
                 // this check should never fail, todo: check if avoidable
                 panic!("Invalid map attempt");
             }
-            if !is_valid(entry) {
+            if !entry.is_valid() {
                 // check if this entry is valid
                 // if not, zalloc a page to store the next page table
                 // set this page table's entry value to the address of that table
                 // and recurse into that table
                 let new_page = zalloc(1);
-                let new_entry = create_entry(new_page as usize, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
-                *entry = new_entry;
+                entry.set_with(new_page as usize, flags, descriptor);
                 let next_table = unsafe { (new_page as *mut PageTable).as_mut().unwrap() };
                 map(
                     next_table,
@@ -445,7 +347,7 @@ fn map(
                 );
             } else {
                 // this entry is valid, extract the next page table address from it and recurse
-                let page = extract_bits(*entry, &descriptor.page_segments[level]) << 12;
+                let page = extract_bits(entry.raw(), &descriptor.page_segments[level]) << 12;
                 let next_table = unsafe { (page as *mut PageTable).as_mut().unwrap() };
                 map(
                     next_table,
@@ -479,22 +381,17 @@ fn unmap_root(table: &mut PageTable, descriptor: &PageTableDescriptor) {
 
 fn unmap(table: &mut PageTable, descriptor: &PageTableDescriptor, level: usize) {
     for index in 0..descriptor.size {
-        let entry = unsafe {
-            (((&mut (table.0).0 as *mut [u8; 4096]) as *mut usize)
-                .add(index * descriptor.entry_size))
-            .as_mut()
-            .unwrap()
-        };
-        if is_branch(entry) {
+        let entry = table.entry_mut(index, descriptor.entry_size);
+        if entry.is_branch() {
             if level != 0 {
-                let page = extract_bits(*entry, &descriptor.page_segments[level]) << 12;
+                let page = extract_bits(entry.raw(), &descriptor.page_segments[level]) << 12;
                 let next_table = unsafe { (page as *mut PageTable).as_mut().unwrap() };
                 unmap(next_table, descriptor, level - 1);
             } else {
                 panic!("invalid page entry encountered");
             }
         }
-        invalidate(entry);
+        entry.invalidate();
     }
     if level != descriptor.levels - 1 {
         dealloc((table as *mut PageTable) as *mut usize);
