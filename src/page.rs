@@ -5,26 +5,29 @@ use core::{mem::size_of, ptr::null_mut};
 static mut ALLOC_START: usize = 0;
 /// page size per riscv Sv39 spec is 4096 bytes
 /// which needs 12 bits to address each byte inside
-const PAGE_ADDR_MAGNITIDE: usize = 12;
+pub const PAGE_ADDR_MAGNITIDE: usize = 12;
 pub const PAGE_SIZE: usize = 1 << PAGE_ADDR_MAGNITIDE;
-/// a mask with all used bits set
-const PAGE_ADDR_MASK: usize = PAGE_SIZE - 1;
+/// a mask with low 12 bits set
+pub const PAGE_ADDR_MASK: usize = PAGE_SIZE - 1;
 
 /// Produces a page-aligned address by adding one
 /// less than the page size (4095), then masking low bits
 /// to decrease the address back to the nearest page boundary
-pub const fn align_address(address: usize) -> usize {
-    (address + PAGE_ADDR_MASK) & !PAGE_ADDR_MASK
+pub const fn align_address_to_page(address: usize) -> usize {
+    align_power(address, PAGE_ADDR_MAGNITIDE)
 }
 
+/// rounds the address up to the next aligned value. if the value is already aligned, it is unchanged.
+/// alignment is such that address % alignment == 0;
 pub const fn align_to(address: usize, alignment: usize) -> usize {
     let mask = alignment - 1;
     (address + mask) & !mask
 }
 
+/// rounds the address up to the next aligned value. if the value is already aligned, it is unchanged.
+/// alignment is such that the number of low bits equal to power is set to zero.
 pub const fn align_power(address: usize, power: usize) -> usize {
-    let mask = (1 << power) - 1;
-    (address + mask) & !mask
+    align_to(address, 1 << power)
 }
 
 pub struct Page {
@@ -200,7 +203,7 @@ pub fn setup() {
     );
 
     let alloc_start = unsafe {
-        ALLOC_START = align_address(end_of_allocation_table);
+        ALLOC_START = align_address_to_page(end_of_allocation_table);
         ALLOC_START
     };
     println!(
