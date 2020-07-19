@@ -66,11 +66,14 @@ impl EntryFlags {
         (self.user as usize) << 4 | 
         (self.global as usize) << 5
     }
+    pub fn software(&mut self) -> &mut SoftFlags {
+        &mut self.software
+    }
 }
 
 /// Permissions flags in a page table entry.
 #[derive(Clone, Copy)]
-pub enum PermFlags {
+enum PermFlags {
     Leaf = 0b000,
     ReadOnly = 0b001,
     ReadWrite = 0b011,
@@ -296,14 +299,28 @@ fn is_invalid(entry: &usize) -> bool {
     *entry & 0b10 == 0 && *entry & 0b100 == 0b100
 }
 
+fn invalidate(entry: &mut usize) {
+    *entry = 0;
+}
+
 /// checks bit 1 is set
 fn is_readable(entry: &usize) -> bool {
     *entry & 0b10 == 0b10
 }
 
+/// checks bit x is set
+fn is_writable(entry: &usize) -> bool {
+    *entry & 0b100 == 0b100
+}
+
+
 /// checks bit 3 is set
 fn is_executable(entry: &usize) -> bool {
     *entry & 0b1000 == 0b1000
+}
+
+fn is_branch(entry: &usize) -> bool {
+    is_valid(entry) && !is_readable(entry) && !is_executable(entry) && !is_writable(entry)
 }
 
 /// produce a page table entry based on the provided descriptor,
