@@ -410,6 +410,41 @@ pub fn translate_address(page_table: &PageTable, virtual_address: usize) -> usiz
     }
 }
 
+
+pub fn identity_map_range(
+    root: &mut PageTable,
+    start: usize,
+    end: usize,
+    flags: EntryFlags,
+) {
+    unsafe {
+        use TableTypes::*;
+        match PAGE_TABLE_TYPE {
+            None => (),
+            Sv32 => internal_map_range(root, start, end, flags, &SV_THIRTY_TWO),
+            Sv39 => internal_map_range(root, start, end, flags,  &SV_THIRTY_NINE),
+            Sv48 => internal_map_range(root, start, end, flags,  &SV_FORTY_EIGHT),
+        }
+    }
+}
+
+fn internal_map_range(
+    root: &mut PageTable,
+    start: usize,
+    end: usize,
+    flags: EntryFlags,
+    descriptor: &PageTableDescriptor,
+) {
+    // round down start address to page boundary
+    let aligned = start & !PAGE_ADDR_MASK;
+    let page_count = (align_power(end, 12) - aligned) / PAGE_SIZE;
+
+    for i in 0..page_count {
+        let address = start + i << 12;
+        map_root(root, address, address, flags, PageSize::Page, descriptor);
+    }
+}
+
 pub fn setup() {
     let kernel_page_table = kmem::get_page_table();
     if !set_translation_type(TableTypes::Sv39, kernel_page_table) {
