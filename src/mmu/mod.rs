@@ -2,7 +2,7 @@ use core::cmp::Ordering;
 
 use crate::cpu_status::Satp;
 use crate::kmem;
-use crate::page::{zalloc, PAGE_SIZE};
+use crate::page::{zalloc, PAGE_SIZE, dealloc};
 
 
 mod forty_eight;
@@ -404,6 +404,7 @@ fn map(
     descriptor: &PageTableDescriptor,
 ) {
     let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
+    // let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
     
     
     let entry: *mut usize = table.entry(vpn, descriptor.entry_size);
@@ -445,6 +446,61 @@ fn map(
             }
         },
     };
+}
+
+pub fn unmap_subtables(
+    table: &mut PageTable,
+) {
+    unsafe {
+        use TableTypes::*;
+        match PAGE_TABLE_TYPE {
+            None => (),
+            Sv32 => unmap_root(
+                table,
+                &SV_THIRTY_TWO,
+            ),
+            Sv39 => unmap_root(
+                table,
+                &SV_THIRTY_NINE,
+            ),
+            Sv48 => unmap_root(
+                table,
+                &SV_FORTY_EIGHT,
+            ),
+        }
+    }
+}
+
+fn unmap_root(
+    table: &mut PageTable,
+    descriptor: &PageTableDescriptor,
+) {
+    unmap(
+        table,
+        descriptor,
+        descriptor.levels - 1,
+    )
+}
+
+fn unmap(table: &mut PageTable, descriptor: &PageTableDescriptor, level: usize) {
+    for index in 0..descriptor.size {
+        let entry = unsafe {
+            (((&mut (table.0).0 as *mut [u8; 4096]) as *mut usize).add(index * descriptor.entry_size)).as_mut().unwrap()
+        };
+        if is_branch(entry) {
+            if level != 0 {
+                let page = extract_bits(*entry, &descriptor.page_segments[level]) << 12;
+                let next_table = unsafe {(page as *mut PageTable).as_mut().unwrap()};
+                unmap(next_table, descriptor, level - 1);
+            } else {
+                panic!("invalid page entry encountered");
+            }
+        }
+        invalidate(entry);
+    }
+    if level != descriptor.levels - 1 {
+        dealloc((table as *mut PageTable) as *mut usize);
+    }
 }
 
 pub fn translate_address(page_table: &PageTable, virtual_address: usize) -> usize {
