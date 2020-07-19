@@ -35,10 +35,13 @@ pub fn get_page_table() -> &'static mut PageTable {
 /// another AllocList can be expected at alloc_list.add(size) bytes later;
 /// these will be placed in allocated pages to subdvide them into memory regions
 struct AllocList {
-    flags_size: u64,
+    flags_size: usize,
 }
 
-const TAKEN_BIT: u64 = 1 << 63;
+#[cfg(target_pointer_width = "64")]
+const TAKEN_BIT: usize = 1 << 63;
+#[cfg(target_pointer_width = "32")]
+const TAKEN_BIT: usize = 1 << 31;
 
 impl AllocList {
     pub fn is_taken(&self) -> bool {
@@ -52,9 +55,9 @@ impl AllocList {
     }
     pub fn set_size(&mut self, size: usize) {
         // ensure taken_bit is clear in input
-        assert!(size as u64 & TAKEN_BIT == 0);
+        assert!(size & TAKEN_BIT == 0);
         let taken = self.flags_size & TAKEN_BIT;
-        self.flags_size = (size as u64 & !TAKEN_BIT) | taken;
+        self.flags_size = (size & !TAKEN_BIT) | taken;
     }
     pub fn is_free(&self) -> bool {
         !self.is_taken()
