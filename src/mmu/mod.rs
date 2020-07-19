@@ -2,8 +2,7 @@ use core::cmp::Ordering;
 
 use crate::cpu_status::Satp;
 use crate::kmem;
-use crate::page::{zalloc, PAGE_SIZE, dealloc};
-
+use crate::page::{dealloc, zalloc, PAGE_SIZE};
 
 mod forty_eight;
 mod thirty_nine;
@@ -63,7 +62,7 @@ impl EntryFlags {
     pub fn to_entry(&self) -> usize {
         0b1 | // set valid bit
         (self.permissions as usize) << 1 |
-        (self.user as usize) << 4 | 
+        (self.user as usize) << 4 |
         (self.global as usize) << 5
     }
     pub fn software(&mut self) -> &mut SoftFlags {
@@ -104,7 +103,7 @@ impl SoftFlags {
     fn get_a(&mut self) -> bool {
         self.0 & 0b01 == 0b01
     }
-    fn get_b(&mut self) -> bool{
+    fn get_b(&mut self) -> bool {
         self.0 & 0b10 == 0b10
     }
 }
@@ -194,13 +193,13 @@ fn traverse(
         // so we need to be sure that the memory address is a) initialized,
         // b) contents valid for usize, c) aligned for usize, and d) no concurrent
         // access to this address can modify it.
-        // a: this page table was allocated with zalloc, so the memory is known zero, or was written since then by 
+        // a: this page table was allocated with zalloc, so the memory is known zero, or was written since then by
         // b: all initialized memory is valid for integral types
         // c: the address is aligned for usize because a is aligned for usize,
         // and the offset (va_vpni) is scaled by pte_size which represents the required alignment
         // d: we cannot prove this yet, but we are single-threaded at the moment so
         // when we switch to multi-threaded we will need to protect page tables with a mutex, semaphore or simular structure
-        
+
         let entry_offset = va_vpni * pte_size;
         // check that va_vpni does not push us past the end of the table
         // this check *should* be redundant because the page table descriptor "vpn_segments"
@@ -313,7 +312,6 @@ fn is_writable(entry: &usize) -> bool {
     *entry & 0b100 == 0b100
 }
 
-
 /// checks bit 3 is set
 fn is_executable(entry: &usize) -> bool {
     *entry & 0b1000 == 0b1000
@@ -405,10 +403,9 @@ fn map(
 ) {
     let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
     // let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
-    
-    
+
     let entry: *mut usize = table.entry(vpn, descriptor.entry_size);
-    let entry = unsafe {entry.as_mut().unwrap()};
+    let entry = unsafe { entry.as_mut().unwrap() };
 
     match page_size.to_level().cmp(&level) {
         Ordering::Equal => {
@@ -418,11 +415,11 @@ fn map(
             // when we reach this point, we are ready to write the leaf entry
             let new_entry = create_entry(physical_address, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
             *entry = new_entry;
-        },
+        }
         Ordering::Greater => {
             // we should never be able to reach here, sanity check
             panic!("shouldn't be here");
-        },
+        }
         Ordering::Less => {
             if level == 0 {
                 // this check should never fail, todo: check if avoidable
@@ -436,61 +433,62 @@ fn map(
                 let new_page = zalloc(1);
                 let new_entry = create_entry(new_page as usize, flags, descriptor); //todo: check the pointer is positioned correctly, might want to insert a call to put_bits here
                 *entry = new_entry;
-                let next_table = unsafe {(new_page as *mut PageTable).as_mut().unwrap()};
-                map(next_table, virtual_address, physical_address, flags, page_size, level - 1, descriptor);
+                let next_table = unsafe { (new_page as *mut PageTable).as_mut().unwrap() };
+                map(
+                    next_table,
+                    virtual_address,
+                    physical_address,
+                    flags,
+                    page_size,
+                    level - 1,
+                    descriptor,
+                );
             } else {
                 // this entry is valid, extract the next page table address from it and recurse
                 let page = extract_bits(*entry, &descriptor.page_segments[level]) << 12;
-                let next_table = unsafe {(page as *mut PageTable).as_mut().unwrap()};
-                map(next_table, virtual_address, physical_address, flags, page_size, level - 1, descriptor);
+                let next_table = unsafe { (page as *mut PageTable).as_mut().unwrap() };
+                map(
+                    next_table,
+                    virtual_address,
+                    physical_address,
+                    flags,
+                    page_size,
+                    level - 1,
+                    descriptor,
+                );
             }
-        },
+        }
     };
 }
 
-pub fn unmap_subtables(
-    table: &mut PageTable,
-) {
+pub fn unmap_subtables(table: &mut PageTable) {
     unsafe {
         use TableTypes::*;
         match PAGE_TABLE_TYPE {
             None => (),
-            Sv32 => unmap_root(
-                table,
-                &SV_THIRTY_TWO,
-            ),
-            Sv39 => unmap_root(
-                table,
-                &SV_THIRTY_NINE,
-            ),
-            Sv48 => unmap_root(
-                table,
-                &SV_FORTY_EIGHT,
-            ),
+            Sv32 => unmap_root(table, &SV_THIRTY_TWO),
+            Sv39 => unmap_root(table, &SV_THIRTY_NINE),
+            Sv48 => unmap_root(table, &SV_FORTY_EIGHT),
         }
     }
 }
 
-fn unmap_root(
-    table: &mut PageTable,
-    descriptor: &PageTableDescriptor,
-) {
-    unmap(
-        table,
-        descriptor,
-        descriptor.levels - 1,
-    )
+fn unmap_root(table: &mut PageTable, descriptor: &PageTableDescriptor) {
+    unmap(table, descriptor, descriptor.levels - 1)
 }
 
 fn unmap(table: &mut PageTable, descriptor: &PageTableDescriptor, level: usize) {
     for index in 0..descriptor.size {
         let entry = unsafe {
-            (((&mut (table.0).0 as *mut [u8; 4096]) as *mut usize).add(index * descriptor.entry_size)).as_mut().unwrap()
+            (((&mut (table.0).0 as *mut [u8; 4096]) as *mut usize)
+                .add(index * descriptor.entry_size))
+            .as_mut()
+            .unwrap()
         };
         if is_branch(entry) {
             if level != 0 {
                 let page = extract_bits(*entry, &descriptor.page_segments[level]) << 12;
-                let next_table = unsafe {(page as *mut PageTable).as_mut().unwrap()};
+                let next_table = unsafe { (page as *mut PageTable).as_mut().unwrap() };
                 unmap(next_table, descriptor, level - 1);
             } else {
                 panic!("invalid page entry encountered");
@@ -536,5 +534,5 @@ fn set_translation_type(mode: TableTypes, address: &mut PageTable) -> bool {
     };
     let found = Satp::from_raw(satp);
 
-    found.raw() == desired.raw() 
+    found.raw() == desired.raw()
 }
