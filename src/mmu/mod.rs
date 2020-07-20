@@ -448,6 +448,41 @@ fn internal_map_range(
     }
 }
 
+pub fn print_map(table: &PageTable) {
+    unsafe {
+        use TableTypes::*;
+        match PAGE_TABLE_TYPE {
+            None => (),
+            Sv32 => inner_print_map(table, &SV_THIRTY_TWO, 0),
+            Sv39 => inner_print_map(table, &SV_THIRTY_NINE, 0),
+            Sv48 => inner_print_map(table, &SV_FORTY_EIGHT, 0),
+        }
+    }
+}
+
+fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, indent: usize) {
+    for _ in 0..indent {
+        print!(" ");
+    }
+    println!("{:x}:", table as *const PageTable as usize);
+    for index in 0..descriptor.size/descriptor.entry_size {
+        let entry = table.entry(index, descriptor.entry_size);
+        if entry.is_valid() {
+            for _ in 0..indent {
+                print!(" ");
+            }
+            println!("{:x} ({:x})", entry.get_address(descriptor), entry.raw());
+            if entry.is_branch() {
+                // println!("descending.");
+                let next = entry.get_address(descriptor);
+                let next_table = unsafe { (next as *const PageTable).as_ref().unwrap() };
+                inner_print_map(next_table, descriptor, indent + 1);
+            }
+        }
+    }
+}
+
+
 pub fn setup() {
     let kernel_page_table = kmem::get_page_table();
     if !set_translation_type(TableTypes::Sv39, kernel_page_table) {

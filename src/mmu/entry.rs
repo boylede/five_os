@@ -144,6 +144,9 @@ impl EntryFlags {
             global: false,
         }
     }
+    pub fn set_branch(&mut self) {
+        self.permissions = PermFlags::Leaf;
+    }
 }
 
 /// Permissions flags in a page table entry.

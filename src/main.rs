@@ -153,6 +153,7 @@ extern "C" fn kmain() {
         );
     }
     println!("done identity map of kernel memory");
+    mmu::print_map(kernel_page_table);
     println!("reached end");
     abort();
 }
