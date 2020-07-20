@@ -30,6 +30,14 @@ pub fn get_page_table() -> &'static mut PageTable {
         KMEM_PAGE_TABLE.as_mut().unwrap()
     }
 }
+/// safe wrapper around static mut
+pub fn get_heap_location() -> usize {
+    unsafe { KMEM_HEAD as usize }
+}
+
+pub fn allocation_count() -> usize {
+    unsafe { KMEM_ALLOC as usize }
+}
 
 /// An AllocList stores the size and status of the following sequence of bytes
 /// another AllocList can be expected at alloc_list.add(size) bytes later;

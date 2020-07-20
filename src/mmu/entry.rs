@@ -128,6 +128,22 @@ impl EntryFlags {
     pub fn software(&mut self) -> &mut SoftFlags {
         &mut self.software
     }
+    pub fn new_rw() -> EntryFlags {
+        EntryFlags {
+            permissions: PermFlags::ReadWrite,
+            software: SoftFlags(0),
+            user: false,
+            global: false,
+        }
+    }
+    pub fn new_re() -> EntryFlags {
+        EntryFlags {
+            permissions: PermFlags::ReadExecute,
+            software: SoftFlags(0),
+            user: false,
+            global: false,
+        }
+    }
 }
 
 /// Permissions flags in a page table entry.

@@ -13,7 +13,7 @@ use forty_eight::SV_FORTY_EIGHT;
 use thirty_nine::SV_THIRTY_NINE;
 use thirty_two::SV_THIRTY_TWO;
 
-use entry::EntryFlags;
+pub use entry::EntryFlags;
 use entry::*;
 
 extern "C" {
