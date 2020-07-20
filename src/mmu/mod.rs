@@ -155,7 +155,6 @@ fn traverse(
         // passed to extract_bits should ensure only values of a limited magnitude can be
         // returned from that function, but we will check here to be sure
         assert!(entry_offset <= table_size - pte_size);
-        ((a + entry_offset) as *const usize).as_ref().unwrap()
         // ((a + entry_offset) as *const usize).as_ref().unwrap()
         Entry::at_address(a + entry_offset)
     };
@@ -313,7 +312,9 @@ fn map(
     match page_size.to_level().cmp(&level) {
         Ordering::Equal => {
             if entry.is_valid() {
-                panic!("attempt to overwrite page table entry");
+                if physical_address != entry.get_address(descriptor) {
+                    panic!("attempted to overwrite existing mmu page table entry");
+                }
             }
             // when we reach this point, we are ready to write the leaf entry
 
@@ -347,7 +348,7 @@ fn map(
                 );
             } else {
                 // this entry is valid, extract the next page table address from it and recurse
-                let page = extract_bits(entry.raw(), &descriptor.page_segments[level]) << 12;
+                let page = entry.get_address(descriptor);
                 let next_table = unsafe { (page as *mut PageTable).as_mut().unwrap() };
                 map(
                     next_table,
@@ -440,7 +441,7 @@ fn internal_map_range(
     let page_count = (align_power(end, 12) - aligned) / PAGE_SIZE;
 
     for i in 0..page_count {
-        let address = start + i << 12;
+        let address = aligned + (i << 12);
         map_root(root, address, address, flags, PageSize::Page, descriptor);
     }
 }

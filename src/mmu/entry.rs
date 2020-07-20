@@ -56,8 +56,17 @@ impl Entry {
     pub fn set(&mut self, new: usize) {
         self.0 = new;
     }
+    pub(in super) fn get_address(&self, descriptor: &PageTableDescriptor) -> usize {
+        let mut address = 0;
+        for level in 0..descriptor.levels {
+            let (bit_width, offset) = descriptor.page_segments[level];
+            let mask = ((1 << bit_width) - 1) << offset;
+            address = (self.0 & mask) >> offset;
+        }
+        address << 12
+    }
     pub(in super) fn set_with(&mut self, address: usize, flags: EntryFlags, descriptor: &PageTableDescriptor) {
-        let address = address << 12;
+        let address = address >> 12;
         let mut bits = 0;
         for level in 0..descriptor.levels {
             let (bit_width, offset) = descriptor.page_segments[level];
