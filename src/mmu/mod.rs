@@ -335,7 +335,9 @@ fn map(
                 // set this page table's entry value to the address of that table
                 // and recurse into that table
                 let new_page = zalloc(1);
-                entry.set_with(new_page as usize, flags, descriptor);
+                let mut branch_flags = flags.clone();
+                branch_flags.set_branch();
+                entry.set_with(new_page as usize, branch_flags, descriptor);
                 let next_table = unsafe { (new_page as *mut PageTable).as_mut().unwrap() };
                 map(
                     next_table,
