@@ -96,7 +96,16 @@ pub fn setup() {
 }
 
 pub fn kzmalloc(_size: usize) -> *mut u8 {
-    unimplemented!()
+    let size = align_power(size, 3);
+    let address = kmalloc(size);
+    if !address.is_null() {
+        for i in 0..size {
+            unsafe {
+                *address.add(i) = 0;
+            }
+        }
+    }
+    address
 }
 
 pub fn kmalloc(size: usize) -> *mut u8 {
