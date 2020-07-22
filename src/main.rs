@@ -26,8 +26,19 @@ extern "C" fn kmain() {
     kmem::setup();
     mmu::setup();
     let kernel_page_table = kmem::get_page_table();
-    page::print_page_table();
+    
     println!("---------- Kernel Space Identity Map ----------");
+    {
+        // map kernel page table
+        let kpt = kernel_page_table as *const mmu::PageTable as usize;
+        println!("Kernel root page table: {:x}", kpt);
+        mmu::identity_map_range(
+            kernel_page_table,
+            kpt,
+            kpt,
+            EntryFlags::new_rw(),
+        );
+    }
     {
         // map kernel's dynamic memory
         let kernel_heap = kmem::get_heap_location();
@@ -41,11 +52,10 @@ extern "C" fn kmain() {
             EntryFlags::new_rw(),
         );
     }
-    
     {
         // map allocation 'bitmap'
         let page_count = layout.heap_size / PAGE_SIZE;
-        println!("allocation bitmap: {:x} -> {:x}", layout.heap_start, layout.heap_start + page_count);
+        println!("Allocation bitmap: {:x} -> {:x}", layout.heap_start, layout.heap_start + page_count);
         mmu::identity_map_range(
             kernel_page_table,
             layout.heap_start,
@@ -55,7 +65,7 @@ extern "C" fn kmain() {
     }
     {
         // map kernel code
-        println!("kernel code section: ");
+        println!("Kernel code section: {:x} -> {:x}", layout.text_start, layout.text_end);
         mmu::identity_map_range(
             kernel_page_table,
             layout.text_start,
@@ -65,7 +75,7 @@ extern "C" fn kmain() {
     }
     {
         // map rodata
-        println!("readonly data section: ");
+        println!("Readonly data section: {:x} -> {:x}", layout.rodata_start, layout.rodata_end);
         mmu::identity_map_range(
             kernel_page_table,
             layout.rodata_start,
@@ -76,7 +86,7 @@ extern "C" fn kmain() {
     }
     {
         // map data
-        println!("data section: ");
+        println!("Data section: {:x} -> {:x}", layout.data_start, layout.data_end);
         mmu::identity_map_range(
             kernel_page_table,
             layout.data_start,
@@ -86,7 +96,7 @@ extern "C" fn kmain() {
     }
     {
         // map bss
-        println!("bss section: ");
+        println!("BSS section: {:x} -> {:x}", layout.bss_start, layout.bss_end);
         mmu::identity_map_range(
             kernel_page_table,
             layout.bss_start,
@@ -96,7 +106,7 @@ extern "C" fn kmain() {
     }
     {
         // map kernel stack
-        println!("kernel stack: ");
+        println!("Kernel stack: {:x} -> {:x}", layout.stack_start, layout.stack_end);
         mmu::identity_map_range(
             kernel_page_table,
             layout.stack_start,
@@ -106,9 +116,9 @@ extern "C" fn kmain() {
     }
     {
         // map UART
-        println!("hardware UART: ");
         let mm_hardware_start = 0x1000_0000;
         let mm_hardware_end = 0x1000_0100;
+        println!("Hardware UART: {:x} -> {:x}", mm_hardware_start, mm_hardware_end);
         mmu::identity_map_range(
             kernel_page_table,
             mm_hardware_start,
@@ -118,9 +128,9 @@ extern "C" fn kmain() {
     }
     {
         // map CLINT, MSIP
-        println!("hardware CLINT, MSIP: ");
         let mm_hardware_start = 0x0200_0000;
         let mm_hardware_end = 0x0200_ffff;
+        println!("Hardware CLINT, MSIP: {:x} -> {:x}", mm_hardware_start, mm_hardware_end);
         mmu::identity_map_range(
             kernel_page_table,
             mm_hardware_start,
@@ -130,9 +140,9 @@ extern "C" fn kmain() {
     }
     {
         // map PLIC
-        println!("hardware PLIC: ");
         let mm_hardware_start = 0x0c00_0000;
         let mm_hardware_end = 0x0c00_2000;
+        println!("Hardware PLIC: {:x} -> {:x}", mm_hardware_start, mm_hardware_end);
         mmu::identity_map_range(
             kernel_page_table,
             mm_hardware_start,
@@ -142,9 +152,9 @@ extern "C" fn kmain() {
     }
     {
         // map ???
-        println!("hardware ???: ");
         let mm_hardware_start = 0x0c20_0000;
         let mm_hardware_end = 0x0c20_8000;
+        println!("Hardware ???: {:x} -> {:x}", mm_hardware_start, mm_hardware_end);
         mmu::identity_map_range(
             kernel_page_table,
             mm_hardware_start,
@@ -152,8 +162,9 @@ extern "C" fn kmain() {
             EntryFlags::new_rw(),
         );
     }
-    println!("done identity map of kernel memory");
-    mmu::print_map(kernel_page_table);
+
+    println!("Finished identity map of kernel memory");
+    page::print_page_table();
     println!("reached end");
     abort();
 }

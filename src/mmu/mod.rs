@@ -247,7 +247,7 @@ pub fn map_address(
     unsafe {
         use TableTypes::*;
         match PAGE_TABLE_TYPE {
-            None => (),
+            None => [0;4], //todo: remove
             Sv32 => map_root(
                 root,
                 virtual_address,
@@ -272,7 +272,7 @@ pub fn map_address(
                 page_size,
                 &SV_FORTY_EIGHT,
             ),
-        }
+        };
     }
 }
 
@@ -283,7 +283,7 @@ fn map_root(
     flags: EntryFlags,
     page_size: PageSize,
     descriptor: &PageTableDescriptor,
-) {
+) -> [usize; 4] {
     map(
         table,
         virtual_address,
@@ -303,7 +303,8 @@ fn map(
     page_size: PageSize,
     level: usize,
     descriptor: &PageTableDescriptor,
-) {
+) -> [usize; 4] {
+    let mut newly_allocated_pages : [usize;4] = [0;4];
     let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
     // let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
 
@@ -334,12 +335,12 @@ fn map(
                 // if not, zalloc a page to store the next page table
                 // set this page table's entry value to the address of that table
                 // and recurse into that table
-                let new_page = zalloc(1);
+                let new_page = zalloc(1).unwrap();
                 let mut branch_flags = flags.clone();
                 branch_flags.set_branch();
-                entry.set_with(new_page as usize, branch_flags, descriptor);
+                entry.set_with(new_page as *mut Page as usize, branch_flags, descriptor);
                 let next_table = unsafe { (new_page as *mut PageTable).as_mut().unwrap() };
-                map(
+                newly_allocated_pages = map(
                     next_table,
                     virtual_address,
                     physical_address,
@@ -348,11 +349,12 @@ fn map(
                     level - 1,
                     descriptor,
                 );
+                newly_allocated_pages[level] = new_page as *mut Page as usize;
             } else {
                 // this entry is valid, extract the next page table address from it and recurse
                 let page = entry.get_address(descriptor);
                 let next_table = unsafe { (page as *mut PageTable).as_mut().unwrap() };
-                map(
+                newly_allocated_pages = map(
                     next_table,
                     virtual_address,
                     physical_address,
@@ -364,6 +366,7 @@ fn map(
             }
         }
     };
+    newly_allocated_pages
 }
 
 pub fn unmap_subtables(table: &mut PageTable) {
@@ -444,7 +447,13 @@ fn internal_map_range(
 
     for i in 0..page_count {
         let address = aligned + (i << 12);
-        map_root(root, address, address, flags, PageSize::Page, descriptor);
+        let newpages = map_root(root, address, address, flags, PageSize::Page, descriptor);
+        for page in newpages.iter() {
+            if *page != 0 {
+                println!("Kernel page table: {:x}", *page);
+                internal_map_range(root, *page, *page, EntryFlags::new_rw(), descriptor);
+            }
+        }
     }
 }
 
@@ -461,22 +470,16 @@ pub fn print_map(table: &PageTable) {
 }
 
 fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, indent: usize) {
-    for _ in 0..indent {
-        print!(" ");
-    }
-    println!("{:x}:", table as *const PageTable as usize);
     for index in 0..descriptor.size/descriptor.entry_size {
         let entry = table.entry(index, descriptor.entry_size);
         if entry.is_valid() {
-            for _ in 0..indent {
-                print!(" ");
-            }
-            println!("{:x} ({:x})", entry.get_address(descriptor), entry.raw());
             if entry.is_branch() {
                 // println!("descending.");
                 let next = entry.get_address(descriptor);
                 let next_table = unsafe { (next as *const PageTable).as_ref().unwrap() };
                 inner_print_map(next_table, descriptor, indent + 1);
+            } else {
+                println!("{:x} ({:x})", entry.get_address(descriptor), entry.raw());
             }
         }
     }
