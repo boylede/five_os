@@ -30,11 +30,11 @@ pub const fn align_power(address: usize, power: usize) -> usize {
     align_to(address, 1 << power)
 }
 
-pub struct Page {
+pub struct PageMarker {
     flags: Pageflags,
 }
 
-impl Page {
+impl PageMarker {
     pub fn is_free(&self) -> bool {
         self.flags.is_empty()
     }
@@ -148,8 +148,8 @@ pub fn print_page_table() {
     println!("----------- Page Table --------------");
     let (page_table, page_count) = page_table();
     {
-        let start = ((page_table as *const _) as *const Page) as usize;
-        let end = start + page_count * size_of::<Page>();
+        let start = ((page_table as *const _) as *const PageMarker) as usize;
+        let end = start + page_count * size_of::<PageMarker>();
         println!("Alloc Table:\t{:x} - {:x}", start, end);
     }
     {
@@ -196,7 +196,7 @@ pub fn setup() {
         page.clear();
     }
 
-    let end_of_allocation_table = layout.heap_start + total_page_count * size_of::<Page>();
+    let end_of_allocation_table = layout.heap_start + total_page_count * size_of::<PageMarker>();
     println!(
         "Allocation Table: {:x} - {:x}",
         layout.heap_start, end_of_allocation_table
@@ -213,9 +213,9 @@ pub fn setup() {
     );
 }
 
-pub fn page_table() -> (&'static mut [Page], usize) {
+pub fn page_table() -> (&'static mut [PageMarker], usize) {
     let layout = StaticLayout::get();
-    let heap_start = { layout.heap_start as *mut Page };
+    let heap_start = { layout.heap_start as *mut PageMarker };
     let count = layout.heap_size / PAGE_SIZE;
     let table = unsafe { core::slice::from_raw_parts_mut(heap_start, count) };
     (table, count)
@@ -232,7 +232,7 @@ pub fn page_index_to_address(index: usize) -> usize {
     (index * PAGE_SIZE) + alloc_start
 }
 
-pub fn alloc_table_entry_to_page_address(entry: &mut Page) -> usize {
+pub fn alloc_table_entry_to_page_address(entry: &mut PageMarker) -> usize {
     let alloc_start = unsafe { ALLOC_START };
     let heap_start = StaticLayout::get().heap_start;
     let page_entry = (entry as *mut _) as usize;
