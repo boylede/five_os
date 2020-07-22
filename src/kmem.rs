@@ -169,3 +169,31 @@ pub fn kmalloc(size: usize) -> *mut usize {
     // failed to allocate any memory, return null pointer
     null_mut()
 }
+
+pub fn kfree(address: *mut usize) {
+    let mut head = unsafe {
+        // SAFETY: access to static global,
+        // we must ensure no one has mutable access to head
+        // currently, we treat all the KMEM_ globals as only mutable during setup.
+        KMEM_HEAD
+    };
+    let tail = unsafe {
+        // SAFETY: pointer arithmatic. alignment is known correct because we start with a usize aligned pointer and alloclist is aligned like usize
+        (head as *mut usize).add(KMEM_ALLOC * PAGE_SIZE / BYTES_PER_USIZE) as *mut AllocList
+    };
+    let mut current_allocation = unsafe {
+        // SAFETY:
+        head.as_mut().unwrap()
+    };
+    while head < tail {
+        if current_allocation.is_taken() {
+            let current_end = current_allocation.get_size() + head as usize;
+            if current_end > address as usize {
+                current_allocation.set_free()
+            } else {
+                head = (head as usize + current_allocation.get_size()) as *mut AllocList;
+                current_allocation = unsafe { head.as_mut() }.unwrap();
+            }
+        }
+    }
+}
