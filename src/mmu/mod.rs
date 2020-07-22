@@ -2,7 +2,8 @@ use core::cmp::Ordering;
 
 use crate::cpu_status::Satp;
 use crate::kmem;
-use crate::page::{dealloc, zalloc, PAGE_SIZE, PAGE_ADDR_MASK, align_power};
+use crate::page::{align_power, dealloc, zalloc, PAGE_ADDR_MASK, PAGE_SIZE};
+use crate::{print, println};
 
 mod entry;
 mod forty_eight;
@@ -55,7 +56,7 @@ pub enum TableTypes {
     Sv48 = 9,
 }
 
-pub struct Page([u8; PAGE_SIZE]);
+pub struct Page(pub [u8; PAGE_SIZE]);
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -72,7 +73,7 @@ impl PageSize {
     }
 }
 
-pub(in self) struct PageTableDescriptor {
+pub(self) struct PageTableDescriptor {
     /// the size of the page table, in bytes (always 4096)
     size: usize,
     /// the number of levels of page tables
@@ -91,7 +92,7 @@ pub(in self) struct PageTableDescriptor {
 /// of bits and offset is the bit address of the lowest bit in the group.
 type BitGroup = (usize, usize);
 
-pub(in self) fn collapse_descriptor(segments: &[BitGroup]) -> BitGroup {
+pub(self) fn collapse_descriptor(segments: &[BitGroup]) -> BitGroup {
     let mut size = 0;
     for group in segments {
         let (gsize, _) = group;
@@ -247,7 +248,7 @@ pub fn map_address(
     unsafe {
         use TableTypes::*;
         match PAGE_TABLE_TYPE {
-            None => [0;4], //todo: remove
+            None => [0; 4], //todo: remove
             Sv32 => map_root(
                 root,
                 virtual_address,
@@ -304,10 +305,9 @@ fn map(
     level: usize,
     descriptor: &PageTableDescriptor,
 ) -> [usize; 4] {
-    let mut newly_allocated_pages : [usize;4] = [0;4];
+    let mut newly_allocated_pages: [usize; 4] = [0; 4];
     let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
     // let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
-
     let entry: &mut Entry = table.entry_mut(vpn, descriptor.entry_size);
 
     match page_size.to_level().cmp(&level) {
@@ -318,7 +318,6 @@ fn map(
                 }
             }
             // when we reach this point, we are ready to write the leaf entry
-
             entry.set_with(physical_address, flags, descriptor);
         }
         Ordering::Greater => {
@@ -330,6 +329,7 @@ fn map(
                 // this check should never fail, todo: check if avoidable
                 panic!("Invalid map attempt");
             }
+
             if !entry.is_valid() {
                 // check if this entry is valid
                 // if not, zalloc a page to store the next page table
@@ -416,20 +416,14 @@ pub fn translate_address(page_table: &PageTable, virtual_address: usize) -> usiz
     }
 }
 
-
-pub fn identity_map_range(
-    root: &mut PageTable,
-    start: usize,
-    end: usize,
-    flags: EntryFlags,
-) {
+pub fn identity_map_range(root: &mut PageTable, start: usize, end: usize, flags: EntryFlags) {
     unsafe {
         use TableTypes::*;
         match PAGE_TABLE_TYPE {
             None => (),
             Sv32 => internal_map_range(root, start, end, flags, &SV_THIRTY_TWO),
-            Sv39 => internal_map_range(root, start, end, flags,  &SV_THIRTY_NINE),
-            Sv48 => internal_map_range(root, start, end, flags,  &SV_FORTY_EIGHT),
+            Sv39 => internal_map_range(root, start, end, flags, &SV_THIRTY_NINE),
+            Sv48 => internal_map_range(root, start, end, flags, &SV_FORTY_EIGHT),
         }
     }
 }
@@ -441,10 +435,10 @@ fn internal_map_range(
     flags: EntryFlags,
     descriptor: &PageTableDescriptor,
 ) {
+
     // round down start address to page boundary
     let aligned = start & !PAGE_ADDR_MASK;
     let page_count = (align_power(end, 12) - aligned) / PAGE_SIZE;
-
     for i in 0..page_count {
         let address = aligned + (i << 12);
         let newpages = map_root(root, address, address, flags, PageSize::Page, descriptor);
@@ -470,7 +464,7 @@ pub fn print_map(table: &PageTable) {
 }
 
 fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, indent: usize) {
-    for index in 0..descriptor.size/descriptor.entry_size {
+    for index in 0..descriptor.size / descriptor.entry_size {
         let entry = table.entry(index, descriptor.entry_size);
         if entry.is_valid() {
             if entry.is_branch() {
@@ -484,7 +478,6 @@ fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, indent: 
         }
     }
 }
-
 
 pub fn setup() {
     let kernel_page_table = kmem::get_page_table();

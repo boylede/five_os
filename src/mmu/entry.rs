@@ -1,6 +1,5 @@
-use super::PageTableDescriptor;
 use super::PageTable;
-use super::collapse_descriptor;
+use super::PageTableDescriptor;
 
 pub struct Entry(usize);
 
@@ -40,7 +39,7 @@ impl Entry {
 
     /// produce a page table entry based on the provided descriptor,
     /// permissions bits, and software bits, and sets valid bit
-    pub(in self) fn new(address: usize, flags: EntryFlags, descriptor: &PageTableDescriptor) -> Self {
+    pub(self) fn new(address: usize, flags: EntryFlags, descriptor: &PageTableDescriptor) -> Self {
         let mut bits = 0;
         for level in 0..descriptor.levels {
             let (bit_width, offset) = descriptor.page_segments[level];
@@ -56,7 +55,7 @@ impl Entry {
     pub fn set(&mut self, new: usize) {
         self.0 = new;
     }
-    pub(in super) fn get_address(&self, descriptor: &PageTableDescriptor) -> usize {
+    pub(super) fn get_address(&self, descriptor: &PageTableDescriptor) -> usize {
         let mut address = 0;
         for level in 0..descriptor.levels {
             let (bit_width, offset) = descriptor.page_segments[level];
@@ -65,7 +64,12 @@ impl Entry {
         }
         address << 12
     }
-    pub(in super) fn set_with(&mut self, address: usize, flags: EntryFlags, descriptor: &PageTableDescriptor) {
+    pub(super) fn set_with(
+        &mut self,
+        address: usize,
+        flags: EntryFlags,
+        descriptor: &PageTableDescriptor,
+    ) {
         let address = address >> 12;
         let mut bits = 0;
         for level in 0..descriptor.levels {
@@ -95,7 +99,10 @@ impl Entry {
         address <<= 12;
         (address as *const PageTable).as_ref().unwrap()
     }
-    pub(super) unsafe fn child_table_mut(&mut self, descriptor: &PageTableDescriptor) -> &mut PageTable {
+    pub(super) unsafe fn child_table_mut(
+        &mut self,
+        descriptor: &PageTableDescriptor,
+    ) -> &mut PageTable {
         let mut address = 0;
         for level in 0..descriptor.levels {
             let (bit_width, offset) = descriptor.page_segments[level];
