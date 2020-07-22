@@ -56,6 +56,7 @@ pub enum TableTypes {
     Sv48 = 9,
 }
 
+#[repr(align(4096))]
 pub struct Page(pub [u8; PAGE_SIZE]);
 
 #[repr(u8)]
@@ -336,7 +337,7 @@ fn map(
                 // set this page table's entry value to the address of that table
                 // and recurse into that table
                 let new_page = zalloc(1).unwrap();
-                let mut branch_flags = flags.clone();
+                let mut branch_flags = flags;
                 branch_flags.set_branch();
                 entry.set_with(new_page as *mut Page as usize, branch_flags, descriptor);
                 let next_table = unsafe { (new_page as *mut PageTable).as_mut().unwrap() };

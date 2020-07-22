@@ -1,4 +1,4 @@
-use crate::mmu::PageTable;
+use crate::mmu::{PageTable, Page};
 use crate::page::{align_power, zalloc, PAGE_SIZE};
 
 /// Allocates memory for the kernel.
@@ -91,7 +91,7 @@ pub fn setup() {
         // future, we can add some protection.
         KMEM_ALLOC = 512;
         let k_alloc = zalloc(KMEM_ALLOC).unwrap();
-        KMEM_HEAD = k_alloc as *mut AllocList;
+        KMEM_HEAD = k_alloc as *mut Page as *mut AllocList;
         let kmem = KMEM_HEAD.as_mut().unwrap();
         kmem.set_free();
         kmem.set_size(KMEM_ALLOC * PAGE_SIZE);
@@ -146,7 +146,7 @@ pub fn kmalloc(size: usize) -> *mut usize {
             if remainder >= size_of::<AllocList>() + 8 {
                 // split the chunk
                 let next = unsafe {
-                    ((head as *mut u8).add(size) as *mut AllocList)
+                    ((head as *mut u8 as usize + size) as *mut AllocList)
                         .as_mut()
                         .unwrap()
                 };
@@ -162,8 +162,7 @@ pub fn kmalloc(size: usize) -> *mut usize {
             return unsafe { head.add(1) } as *mut usize;
         } else {
             // go to next chunk
-            head =
-                unsafe { (head as *mut u8).add(current_allocation.get_size()) } as *mut AllocList;
+            head = (head as *mut u8 as usize + current_allocation.get_size()) as *mut AllocList;
             current_allocation = unsafe { head.as_mut() }.unwrap();
         }
     }
