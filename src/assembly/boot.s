@@ -48,12 +48,25 @@ _start:
 
     li      t3, (1 << 3) | (1 << 7) | (1 << 11)
     csrw    mie, t3
-    la      ra, 4f
+    # set the address we will return to after kinit runs
+    la      ra, 3f
     # mret will update mstatus as well
     mret
 
 
-
+# setup to run after kinit has finished
+3:
+    # set mstatus previous-status bits to desired status
+    # MPP = 1 [supervisor], offset 11; mpie = 1, offset 7, spie = 1, offset 5
+    li		t0, (0b01 << 11) | (1 << 7) | (1 << 5)
+	csrw	mstatus, t0
+    # set trap vector
+    la		t2, asm_trap_vector
+	csrw	mtvec, t2
+    # set ra to the desired rust kernel main function, kmain
+    # use mret, which moves previous-status to current status bits
+    # and moves instruction pointer back into rust code
+    mret
 
 
 # infinite loop
