@@ -83,6 +83,8 @@ impl AllocList {
     }
 }
 
+/// allocate pages for kernel memory, initialize bumplist/skiplist allocator
+/// allocate page for kernel's page table
 pub fn setup() {
     unsafe {
         // SAFETY: We are writing to static globals, which requires that
