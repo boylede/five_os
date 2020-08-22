@@ -43,7 +43,7 @@ _start:
     li      t0, (0b11 << 11) | (1 << 7) | (1 << 3)
     csrw    mstatus, t0
     # set MEPC (exception program counter) to kernel entry point
-    la      t1, kmain
+    la      t1, kinit
     csrw    mepc, t1
 
     li      t3, (1 << 3) | (1 << 7) | (1 << 11)

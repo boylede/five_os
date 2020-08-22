@@ -16,7 +16,7 @@ use mmu::EntryFlags;
 use page::PAGE_SIZE;
 
 #[no_mangle]
-extern "C" fn kmain() {
+extern "C" fn kinit() {
     logo::print_logo();
     cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
@@ -190,6 +190,10 @@ extern "C" fn kmain() {
     abort();
 }
 
+#[no_mangle]
+extern "C" fn kmain() {
+    unimplemented!()
+}
 #[no_mangle]
 extern "C" fn eh_personality() {}
 
