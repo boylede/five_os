@@ -1,3 +1,4 @@
+# don't use compressed instructions
 .option norvc
 .section .data
 
@@ -5,17 +6,22 @@
 .global _start
 _start:
     # if core id != 0, jump to infinite loop
+    # we only run boot sequence on core 0,
+    # other cores will be initialized later
     csrr    t0, mhartid
     bnez    t0, 4f
     # clear address translation, protection
+    # this is not needed, implementation should set this zero already
+    # more of a reference for the reader
     csrw    satp, zero
 
+
 .option push
-.option norelax
+.option norelax # ensures the following assembly is not relaxed by the linker
     # load the memory location at the end of the
     # text section / begining of rodata, per layout
     la  gp, _global_pointer
-.option pop
+.option pop # reverts the norelax option to whatever was set before
 
     # clear .bss section
     la      a0, _bss_start
