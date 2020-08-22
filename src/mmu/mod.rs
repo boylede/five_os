@@ -485,6 +485,12 @@ fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, indent: 
     }
 }
 
+
+/// attempt to set the translation table to the kernel translation table, 
+/// and set the type of translation used. 
+/// panics if implementation does not support desired translation spec
+/// todo: don't panic, return error or supported translation spec instead
+/// todo: write PAGE_TABLE_TYPE with the resulting type
 pub fn setup() {
     let kernel_page_table = kmem::get_page_table();
     if !set_translation_type(TableTypes::Sv39, kernel_page_table) {
@@ -495,7 +501,9 @@ pub fn setup() {
 /// Attempts to set the preferred translation table type
 /// falling back if unsupported. will fall back to no
 /// translation if none is supported by processor.
-fn set_translation_type(mode: TableTypes, address: &mut PageTable) -> bool {
+/// sets the satp register to the given address.
+/// does not turn on address translation
+fn set_translation_table(mode: TableTypes, address: &mut PageTable) -> bool {
     let mode = mode as u8;
     let address = { address as *mut _ } as usize;
     let desired = Satp::from(address, mode);
