@@ -1,5 +1,9 @@
 #![no_std]
 #![no_main]
+#![feature(panic_info_message,
+    allocator_api,
+    alloc_error_handler,
+    alloc_prelude)]
 
 mod console;
 mod cpu_status;
@@ -7,6 +11,7 @@ mod kmem;
 mod layout;
 mod logo;
 mod mmu;
+mod mem;
 mod page;
 mod trap;
 mod uart;
