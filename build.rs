@@ -10,6 +10,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut builder = Build::new();
 
+    builder.flag("-mabi=lp64d");
+
     for file in assembly_files.iter() {
         let filename = asm_dir.join(file);
         builder.file(filename);
