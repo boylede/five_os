@@ -1,9 +1,9 @@
-use crate::uart::Uart;
+// use crate::uart::Uart;
 
-#[macro_use]
-use crate::{print, println};
+// #[macro_use]
+// use crate::{print, println};
 
-mod commands;
+// mod commands;
 
 #[macro_export]
 macro_rules! print {
@@ -25,6 +25,8 @@ macro_rules! println
 		print!(concat!($fmt, "\r\n"), $($args)+)
 	});
 }
+
+/*
 
 struct CommandBuffer {
     buffer: [u8; 256],
@@ -102,3 +104,5 @@ impl Console {
         println!("Closing console...");
     }
 }
+
+*/

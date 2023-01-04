@@ -82,7 +82,6 @@ impl AllocList {
         self.flags_size = 0;
     }
 }
-
 /// allocate pages for kernel memory, initialize bumplist/skiplist allocator
 /// allocate page for kernel's page table
 pub fn setup() {
@@ -93,11 +92,13 @@ pub fn setup() {
         // future, we can add some protection.
         KMEM_ALLOC = 512;
         let k_alloc = zalloc(KMEM_ALLOC).unwrap();
+        // assert!(!k_alloc.is_null());
         KMEM_HEAD = k_alloc as *mut Page as *mut AllocList;
         let kmem = KMEM_HEAD.as_mut().unwrap();
         kmem.set_free();
         kmem.set_size(KMEM_ALLOC * PAGE_SIZE);
         KMEM_PAGE_TABLE = zalloc(1).unwrap() as *mut PageTable;
+        // KMEM_PAGE_TABLE.initialize();
     }
 }
 
@@ -129,9 +130,9 @@ pub fn kmalloc(size: usize) -> *mut usize {
     };
     let mut current_allocation = unsafe {
         // SAFETY:
-        head.as_mut()
-    }
-    .unwrap();
+        head.as_mut().unwrap()
+    };
+    
     // local variable to compare to head while walking kernel memory
     let tail = unsafe {
         // SAFETY: pointer arithmatic. alignment is known correct because we start with a usize aligned pointer and alloclist is aligned like usize
@@ -148,7 +149,8 @@ pub fn kmalloc(size: usize) -> *mut usize {
             if remainder >= size_of::<AllocList>() + 8 {
                 // split the chunk
                 let next = unsafe {
-                    ((head as *mut u8 as usize + size) as *mut AllocList)
+                    // SAFETY:
+                    ((head as usize + size) as *mut AllocList)
                         .as_mut()
                         .unwrap()
                 };
@@ -164,7 +166,7 @@ pub fn kmalloc(size: usize) -> *mut usize {
             return unsafe { head.add(1) } as *mut usize;
         } else {
             // go to next chunk
-            head = (head as *mut u8 as usize + current_allocation.get_size()) as *mut AllocList;
+            head = (head as usize + current_allocation.get_size()) as *mut AllocList;
             current_allocation = unsafe { head.as_mut() }.unwrap();
         }
     }
@@ -198,4 +200,14 @@ pub fn kfree(address: *mut usize) {
             }
         }
     }
+    coalesce()
+}
+
+pub fn coalesce() {
+    unimplemented!()
+}
+
+/// prints the allocation table
+pub fn print_table() {
+    unimplemented!()
 }

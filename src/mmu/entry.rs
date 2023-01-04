@@ -70,6 +70,7 @@ impl Entry {
         flags: EntryFlags,
         descriptor: &PageTableDescriptor,
     ) {
+        // print!("setting entry with address {:x} ->", address);
         let address = address >> 12;
         let mut bits = 0;
         for level in 0..descriptor.levels {
@@ -78,6 +79,7 @@ impl Entry {
             bits = (address << offset) & mask;
         }
         bits |= flags.to_entry();
+        // println!("{:x}", bits);
         self.0 = bits;
     }
     pub fn from_raw(entry: usize) -> Self {

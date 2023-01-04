@@ -191,14 +191,18 @@ extern "C" fn kinit() {
 
     println!("Finished identity map of kernel memory");
     page::print_page_table();
-    println!("reached end");
-    abort();
+    println!("done with kinit");
 }
 
 #[no_mangle]
 extern "C" fn kmain() {
-    unimplemented!()
+    println!("entering kmain");
+    
+    println!("reached end");
+    abort();
 }
+
+
 #[no_mangle]
 extern "C" fn eh_personality() {}
 

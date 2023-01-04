@@ -34,6 +34,8 @@ pub const fn align_power(address: usize, power: usize) -> usize {
     align_to(address, 1 << power)
 }
 
+pub struct PageContents(core::sync::atomic::AtomicU8);
+
 pub struct PageMarker {
     flags: Pageflags,
 }
@@ -112,10 +114,14 @@ pub fn alloc(count: usize) -> Option<*mut [Page]> {
             }
         });
         let alloc_start = unsafe { ALLOC_START };
+        // println!("----------> allocating {} at {:x}", count, (alloc_start + PAGE_SIZE * i));
         let address = (alloc_start + PAGE_SIZE * i) as *mut Page;
         unsafe { Some(core::slice::from_raw_parts_mut(address, count) as *mut [Page]) }
     } else {
+        // NonNull::dangling()
         None
+        // null_mut()
+        // core::ptr::null_mut()
     }
 }
 
@@ -149,6 +155,14 @@ pub fn zalloc(count: usize) -> Option<*mut [Page]> {
             *byte = 0;
         }
     }
+    Some(pages)
+    // Option<*mut [Page]>
+    // unimplemented!()
+    // let page = alloc(count) as *mut u64;
+    // for i in 0..(PAGE_SIZE * count) / 8 {
+    //     unsafe { *page.add(i) = 0 };
+    // }
+    // page as *mut usize
 }
 
 
