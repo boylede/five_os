@@ -18,6 +18,7 @@ use layout::StaticLayout;
 use mmu::EntryFlags;
 use page::PAGE_SIZE;
 
+/// Our first entry point out of the assembly boot.s
 #[no_mangle]
 extern "C" fn kinit() {
     logo::print_logo();

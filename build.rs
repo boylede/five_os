@@ -14,8 +14,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for file in assembly_files.iter() {
         let filename = asm_dir.join(file);
+        println!("cargo:rerun-if-changed={}", filename.display());
         builder.file(filename);
-        // println!("cargo:rerun-if-changed={}", filename);
+        
     }
 
     builder.compile("asm");
