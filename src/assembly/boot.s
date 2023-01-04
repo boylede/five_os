@@ -5,16 +5,6 @@
 .section .text.init
 .global _start
 _start:
-    # if core id != 0, jump to infinite loop
-    # we only run boot sequence on core 0,
-    # other cores will be initialized later
-    csrr    t0, mhartid
-    bnez    t0, 4f
-    # clear address translation, protection
-    # this is not needed, implementation should set this zero already
-    # more of a reference for the reader
-    csrw    satp, zero
-
 
 .option push
 .option norelax # ensures the following assembly is not relaxed by the linker
@@ -23,6 +13,17 @@ _start:
     la  gp, _global_pointer
 .option pop # reverts the norelax option to whatever was set before
 
+    # clear address translation, protection
+    # this is not needed, implementation should set this zero already
+    # more of a reference for the reader
+    csrw    satp, zero
+
+    # if core id != 0, jump to infinite loop
+    # we only run boot sequence on core 0,
+    # other cores will be woken later with an IPI
+    csrr    t0, mhartid
+    bnez    t0, 4f
+    
     # clear .bss section
     la      a0, _bss_start
     la      a1, _bss_end
@@ -33,23 +34,29 @@ _start:
     bltu    a0, a1, 1b
 2:
     # allow superviser-mode interrupt and exception handling
-    li      t5, 0xffff
-    csrw    medeleg, t5
-    csrw    mideleg, t5
+    # todo: reenable somewhere?
+    #li      t5, 0xffff
+    #csrw    medeleg, t5
+    #csrw    mideleg, t5
 
     # set the stack pointer to end of stack space
     la      sp, _stack_end
     # set the mstatus register, MPP=3, MPIE=1, MIE=1
     # li      t0, (0b11 << 11) | (1 << 7) | (1 << 3)
+    # actually, jk, just set mpp = 2
     li      t0, (0b11 << 11)
     csrw    mstatus, t0
-    # set MEPC (exception program counter) to kernel entry point
-    la      t1, kinit
-    csrw    mepc, t1
+    
 
     # li      t3, (1 << 3) | (1 << 7) | (1 << 11)
     # csrw    mie, t3
+    
+    # disable interupts
     csrw    mie, zero
+
+    # set MEPC (exception program counter) to kernel entry point
+    la      t1, kinit
+    csrw    mepc, t1
 
     # set the address we will return to after kinit runs
     la      ra, enter_supervisor
