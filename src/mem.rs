@@ -11,7 +11,7 @@ unsafe impl GlobalAlloc for BumpPointerAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         unimplemented!()
     }
-    unsafe fn dealloc(&self, _: *mut u8, _:Layout) {
+    unsafe fn dealloc(&self, _: *mut u8, _: Layout) {
         unimplemented!()
     }
 }

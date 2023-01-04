@@ -1,4 +1,4 @@
-use crate::mmu::{PageTable, Page};
+use crate::mmu::{Page, PageTable};
 use crate::page::{align_power, zalloc, PAGE_SIZE};
 
 /// Allocates memory for the kernel.
@@ -132,7 +132,7 @@ pub fn kmalloc(size: usize) -> *mut usize {
         // SAFETY:
         head.as_mut().unwrap()
     };
-    
+
     // local variable to compare to head while walking kernel memory
     let tail = unsafe {
         // SAFETY: pointer arithmatic. alignment is known correct because we start with a usize aligned pointer and alloclist is aligned like usize
@@ -150,9 +150,7 @@ pub fn kmalloc(size: usize) -> *mut usize {
                 // split the chunk
                 let next = unsafe {
                     // SAFETY:
-                    ((head as usize + size) as *mut AllocList)
-                        .as_mut()
-                        .unwrap()
+                    ((head as usize + size) as *mut AllocList).as_mut().unwrap()
                 };
                 next.clear();
                 next.set_free();

@@ -165,9 +165,8 @@ pub fn zalloc(count: usize) -> Option<*mut [Page]> {
     // page as *mut usize
 }
 
-
 /// prints out the currently allocated pages
-/// 
+///
 pub fn print_page_table() {
     println!("----------- Page Table --------------");
     let (page_table, page_count) = page_table();

@@ -1,17 +1,15 @@
 #![no_std]
 #![no_main]
-#![feature(panic_info_message,
-    allocator_api,
-    alloc_error_handler,
-    alloc_prelude)]
+#![feature(panic_info_message, allocator_api, alloc_error_handler)]
+#![allow(dead_code)]
 
 mod console;
 mod cpu_status;
 mod kmem;
 mod layout;
 mod logo;
-mod mmu;
 mod mem;
+mod mmu;
 mod page;
 mod trap;
 mod uart;
@@ -197,11 +195,10 @@ extern "C" fn kinit() {
 #[no_mangle]
 extern "C" fn kmain() {
     println!("entering kmain");
-    
+
     println!("reached end");
     abort();
 }
-
 
 #[no_mangle]
 extern "C" fn eh_personality() {}

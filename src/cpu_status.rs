@@ -9,7 +9,7 @@ extern "C" {
     fn asm_get_mimpid() -> usize;
     fn asm_get_mhartid() -> usize;
     fn asm_get_mstatus() -> usize;
-    fn asm_set_mstatus(_:usize);
+    fn asm_set_mstatus(_: usize);
     fn asm_get_mepc() -> usize;
 }
 

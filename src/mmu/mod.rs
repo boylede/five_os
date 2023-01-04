@@ -2,7 +2,7 @@ use core::cmp::Ordering;
 
 use crate::cpu_status::Satp;
 use crate::kmem;
-use crate::page::{dealloc, zalloc, PAGE_SIZE, PAGE_ADDR_MASK, align_power};
+use crate::page::{align_power, dealloc, zalloc, PAGE_ADDR_MASK, PAGE_SIZE};
 use crate::{print, println};
 
 mod entry;
@@ -73,7 +73,7 @@ impl PageSize {
     }
 }
 
-pub(in self) struct PageTableDescriptor {
+pub(self) struct PageTableDescriptor {
     /// the size of the page table, in bytes (always 4096)
     size: usize,
     /// the number of levels of page tables
@@ -92,7 +92,7 @@ pub(in self) struct PageTableDescriptor {
 /// of bits and offset is the bit address of the lowest bit in the group.
 type BitGroup = (usize, usize);
 
-pub(in self) fn collapse_descriptor(segments: &[BitGroup]) -> BitGroup {
+pub(self) fn collapse_descriptor(segments: &[BitGroup]) -> BitGroup {
     let mut size = 0;
     for group in segments {
         let (gsize, _) = group;
@@ -251,7 +251,7 @@ pub fn map_address(
     unsafe {
         use TableTypes::*;
         match PAGE_TABLE_TYPE {
-            None => [0;4], //todo: remove
+            None => [0; 4], //todo: remove
             Sv32 => map_root(
                 root,
                 virtual_address,
@@ -308,7 +308,7 @@ fn map(
     level: usize,
     descriptor: &PageTableDescriptor,
 ) -> [usize; 4] {
-    let mut newly_allocated_pages : [usize;4] = [0;4];
+    let mut newly_allocated_pages: [usize; 4] = [0; 4];
     // println!("~~~~~~~~~~~~~~~~~~~~~~~~~~~ {:x} -> {:x} @ {}", virtual_address, physical_address, level);
     let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
     // let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
@@ -340,7 +340,7 @@ fn map(
                 // this check should never fail, todo: check if avoidable
                 panic!("Invalid map attempt");
             }
-            
+
             if !entry.is_valid() {
                 // println!("we reached an empty entry, allocating a page for it");
                 // check if this entry is valid
@@ -443,20 +443,14 @@ pub fn translate_address(page_table: &PageTable, virtual_address: usize) -> usiz
     }
 }
 
-
-pub fn identity_map_range(
-    root: &mut PageTable,
-    start: usize,
-    end: usize,
-    flags: EntryFlags,
-) {
+pub fn identity_map_range(root: &mut PageTable, start: usize, end: usize, flags: EntryFlags) {
     unsafe {
         use TableTypes::*;
         match PAGE_TABLE_TYPE {
             None => (),
             Sv32 => internal_map_range(root, start, end, flags, &SV_THIRTY_TWO),
-            Sv39 => internal_map_range(root, start, end, flags,  &SV_THIRTY_NINE),
-            Sv48 => internal_map_range(root, start, end, flags,  &SV_FORTY_EIGHT),
+            Sv39 => internal_map_range(root, start, end, flags, &SV_THIRTY_NINE),
+            Sv48 => internal_map_range(root, start, end, flags, &SV_FORTY_EIGHT),
         }
     }
 }
@@ -468,9 +462,8 @@ fn internal_map_range(
     flags: EntryFlags,
     descriptor: &PageTableDescriptor,
 ) {
-    
     // println!("mapping {:x} to {:x} at page table located {:x}", start, end, ((root as *mut PageTable) as usize));
-    
+
     // round down start address to page boundary
     let aligned = start & !PAGE_ADDR_MASK;
     let page_count = (align_power(end, 12) - aligned) / PAGE_SIZE;
@@ -501,7 +494,7 @@ pub fn print_map(table: &PageTable) {
 
 fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, indent: usize) {
     // println!("{:x}:", table as *const PageTable as usize);
-    for index in 0..descriptor.size/descriptor.entry_size {
+    for index in 0..descriptor.size / descriptor.entry_size {
         let entry = table.entry(index, descriptor.entry_size);
         if entry.is_valid() {
             if entry.is_branch() {
@@ -516,9 +509,8 @@ fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, indent: 
     }
 }
 
-
-/// attempt to set the translation table to the kernel translation table, 
-/// and set the type of translation used. 
+/// attempt to set the translation table to the kernel translation table,
+/// and set the type of translation used.
 /// panics if implementation does not support desired translation spec
 /// todo: don't panic, return error or supported translation spec instead
 /// todo: write PAGE_TABLE_TYPE with the resulting type
