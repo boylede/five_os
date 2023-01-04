@@ -40,22 +40,25 @@ _start:
     # set the stack pointer to end of stack space
     la      sp, _stack_end
     # set the mstatus register, MPP=3, MPIE=1, MIE=1
-    li      t0, (0b11 << 11) | (1 << 7) | (1 << 3)
+    # li      t0, (0b11 << 11) | (1 << 7) | (1 << 3)
+    li      t0, (0b11 << 11)
     csrw    mstatus, t0
     # set MEPC (exception program counter) to kernel entry point
     la      t1, kinit
     csrw    mepc, t1
 
-    li      t3, (1 << 3) | (1 << 7) | (1 << 11)
-    csrw    mie, t3
+    # li      t3, (1 << 3) | (1 << 7) | (1 << 11)
+    # csrw    mie, t3
+    csrw    mie, zero
+
     # set the address we will return to after kinit runs
-    la      ra, 3f
+    la      ra, enter_supervisor
     # mret will update mstatus as well
     mret
 
 
 # setup to run after kinit has finished
-3:
+enter_supervisor:
     # set mstatus previous-status bits to desired status
     # MPP = 1 [supervisor], offset 11; mpie = 1, offset 7, spie = 1, offset 5
     li		t0, (0b01 << 11) | (1 << 7) | (1 << 5)
@@ -63,7 +66,17 @@ _start:
     # set trap vector
     la		t2, asm_trap_vector
 	csrw	mtvec, t2
-    # set ra to the desired rust kernel main function, kmain
+    # set mepc to the desired rust kernel main function, kmain
+    la		t1, kmain
+	csrw	mepc, t1
+
+    # set mie
+    # li		t2, (1 << 1) | (1 << 5) | (1 << 9)
+	# csrw	mie, t2
+    li      t3, (1 << 3) | (1 << 7) | (1 << 11)
+    csrw    mie, t3
+    # set ra to where we will come back to when kmain finishes.
+    la      ra, 4f
     # use mret, which moves previous-status to current status bits
     # and moves instruction pointer back into rust code
     mret

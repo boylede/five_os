@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let asm_dir = PathBuf::from(r"./src/assembly");
 
     println!("cargo:rustc-link-search=linker/");
-    let assembly_files = vec!["boot.riscv", "trap.riscv", "cpu.riscv"];
+    let assembly_files = vec!["boot.s", "trap.s", "cpu.s"];
 
     let mut builder = Build::new();
 
