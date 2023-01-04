@@ -1,7 +1,6 @@
 extern "C" {
     static _text_start: usize;
     static _trap_start: usize;
-    static _trap_end: usize;
     static _text_end: usize;
     static _global_pointer: usize;
     static _rodata_start: usize;
@@ -29,7 +28,6 @@ static mut LAYOUT: Option<StaticLayout> = None;
 pub struct StaticLayout {
     pub text_start: usize,
     pub trap_start: usize,
-    pub trap_end: usize,
     pub text_end: usize,
     pub global_pointer: usize,
     pub rodata_start: usize,
@@ -56,7 +54,6 @@ impl StaticLayout {
         StaticLayout {
             text_start: unsafe { &_text_start as *const _ } as usize,
             trap_start: unsafe { &_trap_start as *const _ } as usize,
-            trap_end: unsafe { &_trap_end as *const _ } as usize,
             text_end: unsafe { &_text_end as *const _ } as usize,
             global_pointer: unsafe { &_global_pointer as *const _ } as usize,
             rodata_start: unsafe { &_rodata_start as *const _ } as usize,
@@ -96,7 +93,7 @@ pub fn layout_sanity_check() {
         l.text_end,
         l.text_end - l.text_start
     );
-    println!(" trap:\t{:x} - {:x}", l.trap_start, l.trap_end);
+    println!(" trap:\t{:x} - {:x}??", l.trap_start, l.text_end);
     println!("global:\t{:x}", l.global_pointer);
     println!(
         "rodata:\t{:x} - {:x}\t{}-bytes",
