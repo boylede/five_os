@@ -85,7 +85,6 @@ impl StaticLayout {
     }
 }
 
-#[macro_use]
 use crate::{print, println};
 
 pub fn layout_sanity_check() {

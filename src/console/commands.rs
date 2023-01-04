@@ -1,4 +1,3 @@
-#[macro_use]
 use crate::{print, println};
 
 const COMMANDS: [Command; 256] = initialize_commands();

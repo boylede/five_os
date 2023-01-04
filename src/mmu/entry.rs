@@ -128,7 +128,7 @@ impl EntryFlags {
     /// Puts each bitflag into the lower 9 bits of a usize,
     /// ready for insertion into any type of page table entry
     /// also sets valid flag
-    pub fn to_entry(&self) -> usize {
+    pub fn to_entry(self) -> usize {
         0b1 | // set valid bit
         (self.permissions as usize) << 1 |
         (self.user as usize) << 4 |

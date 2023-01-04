@@ -8,7 +8,7 @@ struct BumpPointerAlloc {
 }
 
 unsafe impl GlobalAlloc for BumpPointerAlloc {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+    unsafe fn alloc(&self, _layout: Layout) -> *mut u8 {
         unimplemented!()
     }
     unsafe fn dealloc(&self, _: *mut u8, _: Layout) {

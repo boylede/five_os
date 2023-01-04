@@ -13,10 +13,9 @@ extern "C" {
     fn asm_get_mepc() -> usize;
 }
 
-#[macro_use]
-use crate::{print, println};
 use crate::layout::StaticLayout;
 use crate::page::align_address_to_page;
+use crate::{print, println};
 
 #[derive(Debug)]
 pub struct Misa {
@@ -181,7 +180,7 @@ impl Satp {
     }
     pub fn set_mode(&mut self, value: u8) {
         match get_base_width() {
-            32 => (unimplemented!()),
+            32 => unimplemented!(),
             64 => {
                 let mut mode: usize = (value & ((1 << 4) - 1)) as usize;
                 mode <<= 60;

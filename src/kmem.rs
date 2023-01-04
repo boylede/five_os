@@ -41,7 +41,7 @@ pub fn get_heap_location() -> usize {
 }
 
 pub fn allocation_count() -> usize {
-    unsafe { KMEM_ALLOC as usize }
+    unsafe { KMEM_ALLOC }
 }
 
 /// An AllocList stores the size and status of the following sequence of bytes
@@ -64,7 +64,7 @@ impl AllocList {
         self.flags_size |= TAKEN_BIT
     }
     pub fn get_size(&self) -> usize {
-        (self.flags_size & !TAKEN_BIT) as usize
+        self.flags_size & !TAKEN_BIT
     }
     pub fn set_size(&mut self, size: usize) {
         // ensure taken_bit is clear in input

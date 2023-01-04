@@ -3,7 +3,7 @@ name = "five_os"
 version = "0.1.0"
 authors = ["Daniel Boyle <boylede+github@gmail.com>"]
 readme = "readme.md"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 

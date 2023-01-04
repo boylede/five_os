@@ -485,14 +485,14 @@ pub fn print_map(table: &PageTable) {
         use TableTypes::*;
         match PAGE_TABLE_TYPE {
             None => (),
-            Sv32 => inner_print_map(table, &SV_THIRTY_TWO, 0),
-            Sv39 => inner_print_map(table, &SV_THIRTY_NINE, 0),
-            Sv48 => inner_print_map(table, &SV_FORTY_EIGHT, 0),
+            Sv32 => inner_print_map(table, &SV_THIRTY_TWO),
+            Sv39 => inner_print_map(table, &SV_THIRTY_NINE),
+            Sv48 => inner_print_map(table, &SV_FORTY_EIGHT),
         }
     }
 }
 
-fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, indent: usize) {
+fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor) {
     // println!("{:x}:", table as *const PageTable as usize);
     for index in 0..descriptor.size / descriptor.entry_size {
         let entry = table.entry(index, descriptor.entry_size);
@@ -501,7 +501,7 @@ fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, indent: 
                 // println!("descending.");
                 let next = entry.get_address(descriptor);
                 let next_table = unsafe { (next as *const PageTable).as_ref().unwrap() };
-                inner_print_map(next_table, descriptor, indent + 1);
+                inner_print_map(next_table, descriptor);
             } else {
                 println!("{:x} ({:x})", entry.get_address(descriptor), entry.raw());
             }
