@@ -1,18 +1,11 @@
 use crate::layout::StaticLayout;
+use crate::mem::bitmap::{page_table, PageMarker};
+use crate::mem::{ALLOC_START, PAGE_SIZE};
 use crate::mmu::Page;
 use crate::{print, println};
 use core::mem::size_of;
 
-/// pointer to the first allocatable-page, i.e. the first
-/// free page-aligned address in memory located after the
-/// bitmap (bytemap) of all pages.
-static mut ALLOC_START: usize = 0;
-/// page size per riscv Sv39 spec is 4096 bytes
-/// which needs 12 bits to address each byte inside
-pub const PAGE_ADDR_MAGNITIDE: usize = 12;
-pub const PAGE_SIZE: usize = 1 << PAGE_ADDR_MAGNITIDE;
-/// a mask with low 12 bits set
-pub const PAGE_ADDR_MASK: usize = PAGE_SIZE - 1;
+use super::PAGE_ADDR_MAGNITIDE;
 
 /// Produces a page-aligned address by adding one
 /// less than the page size (4095), then masking low bits
@@ -35,62 +28,6 @@ pub const fn align_power(address: usize, power: usize) -> usize {
 }
 
 pub struct PageContents(core::sync::atomic::AtomicU8);
-
-pub struct PageMarker {
-    flags: Pageflags,
-}
-
-impl PageMarker {
-    pub fn is_free(&self) -> bool {
-        self.flags.is_empty()
-    }
-    pub fn is_taken(&self) -> bool {
-        !self.flags.is_empty()
-    }
-    pub fn is_last(&self) -> bool {
-        self.flags.is_last()
-    }
-    pub fn clear(&mut self) {
-        self.flags.clear();
-    }
-    pub fn set_taken(&mut self) {
-        self.flags.set_taken();
-    }
-    pub fn set_last(&mut self) {
-        self.flags.set_last();
-    }
-}
-
-struct Pageflags(u8);
-
-impl Pageflags {
-    pub fn is_taken(&self) -> bool {
-        self.0 & 0b1 == 0b1
-    }
-    pub fn is_last(&self) -> bool {
-        self.0 & 0b10 == 0b10
-    }
-    pub fn is_empty(&self) -> bool {
-        self.0 & 0b1 == 0b0
-    }
-    pub fn owner(&self) -> u8 {
-        self.0 >> 2
-    }
-    pub fn set_taken(&mut self) {
-        self.0 |= 0b1;
-    }
-    pub fn set_last(&mut self) {
-        self.0 |= 0b10;
-    }
-    pub fn clear(&mut self) {
-        self.0 = 0;
-    }
-    pub fn set_owner(&mut self, value: u8) {
-        let mut mask = value & ((1 << 6) - 1);
-        mask <<= 2;
-        self.0 = (self.0 & 0b11) | mask;
-    }
-}
 
 /// Allocates the number of pages requested
 pub fn alloc(count: usize) -> Option<*mut [Page]> {
@@ -194,7 +131,8 @@ pub fn print_page_table() {
             if page.is_last() {
                 let page_address = alloc_table_entry_to_page_address(page) + PAGE_SIZE - 1;
                 let size = (page_address - start) / PAGE_SIZE;
-                println!("{:x}: {} page(s).", page_address, size + 1);
+                print!("{:x}: {} page(s).", page_address, size + 1);
+                println!("");
                 middle = false;
             }
         }
@@ -207,41 +145,6 @@ pub fn print_page_table() {
         println!("Free pages: {} = {} bytes", free, free * PAGE_SIZE);
     }
     println!("----------------------------------------");
-}
-
-/// Setup the kernel's page table to keep track of allocations.
-pub fn setup() {
-    println!("----------- Dynamic Layout --------------");
-    let layout = StaticLayout::get();
-    let (page_table, total_page_count) = page_table();
-    println!("{} pages x {}-bytes", total_page_count, PAGE_SIZE);
-    for page in page_table.iter_mut() {
-        page.clear();
-    }
-
-    let end_of_allocation_table = layout.heap_start + total_page_count * size_of::<PageMarker>();
-    println!(
-        "Allocation Table: {:x} - {:x}",
-        layout.heap_start, end_of_allocation_table
-    );
-
-    let alloc_start = unsafe {
-        ALLOC_START = align_address_to_page(end_of_allocation_table);
-        ALLOC_START
-    };
-    println!(
-        "Usable Pages: {:x} - {:x}",
-        alloc_start,
-        alloc_start + total_page_count * PAGE_SIZE
-    );
-}
-
-pub fn page_table() -> (&'static mut [PageMarker], usize) {
-    let layout = StaticLayout::get();
-    let heap_start = { layout.heap_start as *mut PageMarker };
-    let count = layout.heap_size / PAGE_SIZE;
-    let table = unsafe { core::slice::from_raw_parts_mut(heap_start, count) };
-    (table, count)
 }
 
 pub fn address_to_page_index(address: *mut usize) -> usize {

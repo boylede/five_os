@@ -2,21 +2,22 @@
 #![no_main]
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
 
-use five_os::*;
+use five_os::{mem::PAGE_SIZE, *};
 
 use layout::StaticLayout;
 use mmu::EntryFlags;
-use page::PAGE_SIZE;
 
 /// Our first entry point out of the assembly boot.s
 #[no_mangle]
 extern "C" fn kinit() {
+    uart::Uart::default().init();
     logo::print_logo();
     cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
     layout::layout_sanity_check();
+
     let layout = StaticLayout::get();
-    page::setup();
+    mem::bitmap::setup();
     kmem::setup();
     mmu::setup();
     let kernel_page_table = kmem::get_page_table();
@@ -179,7 +180,7 @@ extern "C" fn kinit() {
     }
 
     println!("Finished identity map of kernel memory");
-    page::print_page_table();
+    mem::bitmap::print_mem_bitmap();
     println!("done with kinit");
 }
 

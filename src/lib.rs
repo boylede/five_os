@@ -8,7 +8,6 @@ pub mod layout;
 pub mod logo;
 pub mod mem;
 pub mod mmu;
-pub mod page;
 pub mod trap;
 pub mod uart;
 

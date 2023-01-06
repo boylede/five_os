@@ -1,5 +1,6 @@
+use crate::mem::page::{align_power, zalloc};
+use crate::mem::PAGE_SIZE;
 use crate::mmu::{Page, PageTable};
-use crate::page::{align_power, zalloc, PAGE_SIZE};
 
 /// Allocates memory for the kernel.
 use core::{mem::size_of, ptr::null_mut};
@@ -36,10 +37,12 @@ pub fn get_page_table() -> &'static mut PageTable {
     }
 }
 /// safe wrapper around static mut
+/// SAFETY: don't call before kmem::init()
 pub fn get_heap_location() -> usize {
     unsafe { KMEM_HEAD as usize }
 }
 
+/// SAFETY: don't call before kmem::init()
 pub fn allocation_count() -> usize {
     unsafe { KMEM_ALLOC }
 }
@@ -90,7 +93,7 @@ pub fn setup() {
         // we ensure exclusive access. currently, we only write these
         // items once at startup and then they are immutable. in the
         // future, we can add some protection.
-        KMEM_ALLOC = 512;
+        KMEM_ALLOC = 64;
         let k_alloc = zalloc(KMEM_ALLOC).unwrap();
         // assert!(!k_alloc.is_null());
         KMEM_HEAD = k_alloc as *mut Page as *mut AllocList;

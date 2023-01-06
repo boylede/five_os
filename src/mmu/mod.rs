@@ -2,7 +2,8 @@ use core::cmp::Ordering;
 
 use crate::cpu_status::Satp;
 use crate::kmem;
-use crate::page::{align_power, dealloc, zalloc, PAGE_ADDR_MASK, PAGE_SIZE};
+use crate::mem::page::{align_power, dealloc, zalloc};
+use crate::mem::{PAGE_ADDR_MASK, PAGE_SIZE};
 use crate::{print, println};
 
 mod entry;
@@ -133,7 +134,7 @@ fn traverse(
 
     // 1) let a be satp.ppn * PAGESIZE. we are disregarding this and using the provided address as the table to search.
     let a = table as *const _ as usize;
-    // and let i be LEVELS - 1, again we are disregarding this subtraction  and taking it as input
+    // and let i be LEVELS - 1, again we are disregarding this subtraction and taking it as input
     let i = level;
 
     // 2) let pte be the value of the page table entry at address a + va.vpn[i]*PTESIZE
@@ -466,14 +467,16 @@ fn internal_map_range(
 
     // round down start address to page boundary
     let aligned = start & !PAGE_ADDR_MASK;
-    let page_count = (align_power(end, 12) - aligned) / PAGE_SIZE;
+    let page_count = ((align_power(end, 12) - aligned) / PAGE_SIZE).max(1);
     // println!("becomes {:x} -> {:x}", aligned, aligned + (page_count<<12));
+    // println!("mapping {} pages", page_count);
     for i in 0..page_count {
         let address = aligned + (i << 12);
+        println!("mapping page# {} at {:x}", i, address);
         let newpages = map_root(root, address, address, flags, PageSize::Page, descriptor);
         for page in newpages.iter() {
             if *page != 0 {
-                println!("Kernel page table: {:x}", *page);
+                println!("  added a kernel page table: {:x}", *page);
                 internal_map_range(root, *page, *page, EntryFlags::new_rw(), descriptor);
             }
         }
@@ -531,11 +534,10 @@ fn set_translation_table(mode: TableTypes, address: &mut PageTable) -> bool {
     let address = { address as *mut _ } as usize;
     let desired = Satp::from(address, mode);
 
-    let satp = unsafe {
+    let found = unsafe {
         asm_set_satp(desired.raw());
         asm_get_satp()
     };
-    let found = Satp::from_raw(satp);
 
-    found.raw() == desired.raw()
+    found == desired.raw()
 }
