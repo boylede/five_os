@@ -1,18 +1,8 @@
 #![no_std]
 #![no_main]
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
-#![allow(dead_code)]
 
-mod console;
-mod cpu_status;
-mod kmem;
-mod layout;
-mod logo;
-mod mem;
-mod mmu;
-mod page;
-mod trap;
-mod uart;
+use five_os::*;
 
 use layout::StaticLayout;
 use mmu::EntryFlags;
@@ -199,22 +189,4 @@ extern "C" fn kmain() {
 
     println!("reached end");
     abort();
-}
-
-#[no_mangle]
-extern "C" fn eh_personality() {}
-
-#[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    println!("aborting: {}", info);
-    abort();
-}
-
-#[inline(never)]
-#[no_mangle]
-extern "C" fn abort() -> ! {
-    use core::sync::atomic::{self, Ordering};
-    loop {
-        atomic::compiler_fence(Ordering::SeqCst);
-    }
 }
