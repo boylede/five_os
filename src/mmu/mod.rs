@@ -89,6 +89,15 @@ pub(self) struct PageTableDescriptor {
     physical_segments: &'static [BitGroup],
 }
 
+impl  PageTableDescriptor {
+    pub fn virtual_address_size(&self) -> usize {
+        self.virtual_segments.iter().map(|(bits, _)|*bits).sum::<usize>() + 12
+    }
+    pub fn physical_address_size(&self) -> usize {
+        self.physical_segments.iter().map(|(bits, _)|*bits).sum::<usize>() + 12
+    }
+}
+
 /// a Newtype of a tuple (usize, usize) which are (size, offset) where size is #
 /// of bits and offset is the bit address of the lowest bit in the group.
 type BitGroup = (usize, usize);
@@ -310,7 +319,7 @@ fn map(
     descriptor: &PageTableDescriptor,
 ) -> [usize; 4] {
     let mut newly_allocated_pages: [usize; 4] = [0; 4];
-    // println!("~~~~~~~~~~~~~~~~~~~~~~~~~~~ {:x} -> {:x} @ {}", virtual_address, physical_address, level);
+    // println!("mapping {:x} -> {:x} @ {}", virtual_address, physical_address, level);
     let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
     // let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
     // println!("entry index (vpn segment at {}): {:x}", level, vpn);
@@ -488,26 +497,42 @@ pub fn print_map(table: &PageTable) {
         use TableTypes::*;
         match PAGE_TABLE_TYPE {
             None => (),
-            Sv32 => inner_print_map(table, &SV_THIRTY_TWO),
-            Sv39 => inner_print_map(table, &SV_THIRTY_NINE),
-            Sv48 => inner_print_map(table, &SV_FORTY_EIGHT),
+            Sv32 => inner_print_map(table, &SV_THIRTY_TWO, 0, 0),
+            Sv39 => inner_print_map(table, &SV_THIRTY_NINE, 0,0),
+            Sv48 => inner_print_map(table, &SV_FORTY_EIGHT, 0,0),
         }
     }
 }
 
-fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor) {
-    // println!("{:x}:", table as *const PageTable as usize);
+fn inner_print_map(table: &PageTable, descriptor: &PageTableDescriptor, base_address: usize, descent: usize) {
+    let max_bits = descriptor.virtual_address_size();
+    let bits_known: usize = descriptor.virtual_segments.iter().take(descent+1).map(|(bits,_)|*bits).sum();
+    let bits_unknown = max_bits - bits_known;
+    let page_size = 1 << bits_unknown;
+    println!("Reading pagetable located at 0x{:x}:", table as *const PageTable as usize);
+    // let page_size = 1 << (12+bits_known);
+    // println!("memory region described by each entry is: 0x{:x}-bytes", page_size);
+    
     for index in 0..descriptor.size / descriptor.entry_size {
+
+        
+        let resulting_address = base_address + (index * page_size);
         let entry = table.entry(index, descriptor.entry_size);
         if entry.is_valid() {
+            println!("{}-{}: 0x{:x}-0x{:x}: {:?}", descent, index, resulting_address,resulting_address+page_size-1, entry);
             if entry.is_branch() {
-                // println!("descending.");
+                // println!("branching");
                 let next = entry.get_address(descriptor);
                 let next_table = unsafe { (next as *const PageTable).as_ref().unwrap() };
-                inner_print_map(next_table, descriptor);
+                
+                    inner_print_map(next_table, descriptor,resulting_address, descent+1);
+                
+                // println!("rejoining");
             } else {
-                println!("{:x} ({:x})", entry.get_address(descriptor), entry.raw());
+                // println!("{}-{}: 0x{:x}-0x{:x}: {:?}", descent, index, resulting_address,resulting_address+page_size-1, entry);
             }
+        } else {
+            // println!("{}-{}: 0x{:x}-0x{:x}: not mapped.", descent, index, resulting_address, resulting_address+page_size-1);
         }
     }
 }

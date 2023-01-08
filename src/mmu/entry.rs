@@ -1,6 +1,7 @@
 use super::PageTable;
 use super::PageTableDescriptor;
 
+#[repr(transparent)]
 pub struct Entry(usize);
 
 impl Entry {
@@ -32,9 +33,28 @@ impl Entry {
     pub fn is_executable(&self) -> bool {
         self.0 & 0b1000 == 0b1000
     }
+    pub fn is_user(&self) -> bool {
+        self.0 & 0b10000 == 0b10000
+    }
+    pub fn is_global(&self) -> bool {
+        self.0 & 0b100000 == 0b100000
+    }
+    pub fn is_accessed(&self) -> bool {
+        self.0 & 0b1000000 == 0b1000000
+    }
+    pub fn is_dirty(&self) -> bool {
+        self.0 & 0b1000000 == 0b1000000
+    }
+    pub fn get_rsw(&self) -> (bool,bool) {
+        (self.0 & 0b10000000 == 0b10000000, self.0 & 0b100000000 == 0b100000000)
+    }
 
     pub fn is_branch(&self) -> bool {
         self.is_valid() && !self.is_readable() && !self.is_executable() && !self.is_writable()
+    }
+    
+    pub fn get_flags() -> EntryFlags {
+        todo!();
     }
 
     /// produce a page table entry based on the provided descriptor,
@@ -113,6 +133,44 @@ impl Entry {
         }
         address <<= 12;
         (address as *mut PageTable).as_mut().unwrap()
+    }
+}
+
+fn write_char(b: bool, c: char, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    if b {
+        write!(f, "{}", c)
+    } else {
+        write!(f, " ")
+    }
+}
+
+impl core::fmt::Debug for Entry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if self.is_valid() {
+            let user = self.is_user();
+            let global = self.is_global();
+            let (a,b) = self.get_rsw();
+            let accessed = self.is_accessed();
+            let dirty = self.is_dirty();
+            if self.is_branch() {
+                write!(f, "branch")
+            } else {
+                write_char(self.is_readable(), 'r', f)?;
+                write_char(self.is_writable(), 'w', f)?;
+                write_char(self.is_executable(), 'e', f)?;
+                write!(f, "-")?;
+                write_char(user, 'U', f)?;
+                write_char(global, 'G', f)?;
+                write_char(accessed, 'A', f)?;
+                write_char(dirty, 'D', f)?;
+                write!(f, "-")?;
+                write_char(a, 'a', f)?;
+                write_char(b, 'b', f)?;
+                write!(f, "-")
+            }
+        } else {
+            write!(f, "not mapped.")
+        }
     }
 }
 

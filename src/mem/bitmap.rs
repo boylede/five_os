@@ -100,7 +100,7 @@ pub fn page_table() -> (&'static mut [PageMarker], usize) {
 
 /// prints out the currently allocated pages
 pub fn print_mem_bitmap() {
-    println!("----------- Page Table --------------");
+    println!("----------- Allocator Bitmap --------------");
     let (page_table, page_count) = page_table();
     {
         let start = ((page_table as *const _) as *const PageMarker) as usize;

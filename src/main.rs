@@ -2,7 +2,7 @@
 #![no_main]
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
 
-use five_os::{mem::PAGE_SIZE, *};
+use five_os::{mem::PAGE_SIZE, *, mmu::print_map};
 
 use layout::StaticLayout;
 use mmu::EntryFlags;
@@ -15,7 +15,7 @@ extern "C" fn kinit() {
     cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
     layout::layout_sanity_check();
-
+    
     let layout = StaticLayout::get();
     mem::bitmap::setup();
     kmem::setup();
@@ -34,14 +34,14 @@ extern "C" fn kinit() {
         let kernel_heap = kmem::get_heap_location();
         let page_count = kmem::allocation_count();
         let end = kernel_heap + page_count * PAGE_SIZE;
-        println!("Dynamic Memory: {:x} -> {:x}", kernel_heap, end);
+        println!("Dynamic Memory: {:x} -> {:x}  RW", kernel_heap, end);
         mmu::identity_map_range(kernel_page_table, kernel_heap, end, EntryFlags::new_rw());
     }
     {
         // map allocation 'bitmap'
         let page_count = layout.heap_size / PAGE_SIZE;
         println!(
-            "Allocation bitmap: {:x} -> {:x}",
+            "Allocation bitmap: {:x} -> {:x}  RE",
             layout.heap_start,
             layout.heap_start + page_count
         );
@@ -55,7 +55,7 @@ extern "C" fn kinit() {
     {
         // map kernel code
         println!(
-            "Kernel code section: {:x} -> {:x}",
+            "Kernel code section: {:x} -> {:x}  RE",
             layout.text_start, layout.text_end
         );
         mmu::identity_map_range(
@@ -68,7 +68,7 @@ extern "C" fn kinit() {
     {
         // map rodata
         println!(
-            "Readonly data section: {:x} -> {:x}",
+            "Readonly data section: {:x} -> {:x}  RE",
             layout.rodata_start, layout.rodata_end
         );
         mmu::identity_map_range(
@@ -82,7 +82,7 @@ extern "C" fn kinit() {
     {
         // map data
         println!(
-            "Data section: {:x} -> {:x}",
+            "Data section: {:x} -> {:x}  RW",
             layout.data_start, layout.data_end
         );
         mmu::identity_map_range(
@@ -95,7 +95,7 @@ extern "C" fn kinit() {
     {
         // map bss
         println!(
-            "BSS section: {:x} -> {:x}",
+            "BSS section: {:x} -> {:x}  RW",
             layout.bss_start, layout.bss_end
         );
         mmu::identity_map_range(
@@ -108,7 +108,7 @@ extern "C" fn kinit() {
     {
         // map kernel stack
         println!(
-            "Kernel stack: {:x} -> {:x}",
+            "Kernel stack: {:x} -> {:x}  RW",
             layout.stack_start, layout.stack_end
         );
         mmu::identity_map_range(
@@ -123,7 +123,7 @@ extern "C" fn kinit() {
         let mm_hardware_start = 0x1000_0000;
         let mm_hardware_end = 0x1000_0100;
         println!(
-            "Hardware UART: {:x} -> {:x}",
+            "Hardware UART: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
         mmu::identity_map_range(
@@ -138,7 +138,7 @@ extern "C" fn kinit() {
         let mm_hardware_start = 0x0200_0000;
         let mm_hardware_end = 0x0200_ffff;
         println!(
-            "Hardware CLINT, MSIP: {:x} -> {:x}",
+            "Hardware CLINT, MSIP: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
         mmu::identity_map_range(
@@ -153,7 +153,7 @@ extern "C" fn kinit() {
         let mm_hardware_start = 0x0c00_0000;
         let mm_hardware_end = 0x0c00_2000;
         println!(
-            "Hardware PLIC: {:x} -> {:x}",
+            "Hardware PLIC: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
         mmu::identity_map_range(
@@ -168,7 +168,7 @@ extern "C" fn kinit() {
         let mm_hardware_start = 0x0c20_0000;
         let mm_hardware_end = 0x0c20_8000;
         println!(
-            "Hardware ???: {:x} -> {:x}",
+            "Hardware ???: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
         mmu::identity_map_range(
@@ -178,16 +178,18 @@ extern "C" fn kinit() {
             EntryFlags::new_rw(),
         );
     }
-
-    println!("Finished identity map of kernel memory");
+    
+    println!("Finished identity map of kernel memory, printing:");
     mem::bitmap::print_mem_bitmap();
+    
+    // print_map(kernel_page_table);
     println!("done with kinit");
 }
 
 #[no_mangle]
 extern "C" fn kmain() {
     println!("entering kmain");
-
+    
     println!("reached end");
     abort();
 }
