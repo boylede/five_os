@@ -90,5 +90,4 @@ _start:
 # and park
 3:
 	wfi
-	j		4b
-
+	j		3b
