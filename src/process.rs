@@ -1,5 +1,5 @@
 use crate::mem::page::alloc;
-use crate::mmu::{PageTable, EntryFlags};
+use crate::mmu::{PageTableUntyped, EntryFlags};
 use crate::{
     mem::{page::zalloc, PAGE_SIZE},
     trap::TrapFrame,
@@ -43,7 +43,7 @@ impl Process {
         };
         let stack = alloc(STACK_SIZE)? as *mut u8;
         let stack_pointer = unsafe { stack.add(PAGE_SIZE * STACK_SIZE) };
-        let page_table = zalloc(1)? as *mut PageTable;
+        let page_table = zalloc(1)? as *mut PageTableUntyped;
         unsafe {
             let table = page_table.as_mut().unwrap();
             table.map(0,0,0,EntryFlags::USER_READ_WRITE);

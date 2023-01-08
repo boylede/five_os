@@ -34,7 +34,7 @@ extern "C" fn kinit() {
     println!("---------- Kernel Space Identity Map ----------");
     {
         // map kernel page table
-        let kpt = kernel_page_table as *const mmu::PageTable as usize;
+        let kpt = kernel_page_table as *const mmu::PageTableUntyped as usize;
         println!("Kernel root page table: {:x}", kpt);
         mmu::identity_map_range(kernel_page_table, kpt, kpt, EntryFlags::READ_WRITE);
     }

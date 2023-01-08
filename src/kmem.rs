@@ -1,6 +1,6 @@
 use crate::mem::page::{align_power, zalloc};
 use crate::mem::PAGE_SIZE;
-use crate::mmu::{Page, PageTable};
+use crate::mmu::{Page, PageTableUntyped};
 
 /// Allocates memory for the kernel.
 use core::{mem::size_of, ptr::null_mut};
@@ -10,7 +10,7 @@ static mut KMEM_ALLOC: usize = 0;
 /// pointer to first byte of kernel allocation
 static mut KMEM_HEAD: *mut AllocList = null_mut();
 /// MMU page table for kernel
-static mut KMEM_PAGE_TABLE: *mut PageTable = null_mut();
+static mut KMEM_PAGE_TABLE: *mut PageTableUntyped = null_mut();
 
 #[cfg(target_pointer_width = "64")]
 const BYTES_PER_USIZE: usize = 8;
@@ -18,7 +18,7 @@ const BYTES_PER_USIZE: usize = 8;
 const BYTES_PER_USIZE: usize = 4;
 
 /// Safe wrapper around page table global
-pub fn get_page_table() -> &'static mut PageTable {
+pub fn get_page_table() -> &'static mut PageTableUntyped {
     unsafe {
         // SAFETY: we are converting a mutable pointer to a mutable reference,
         // we need to ensure that the pointer is null, or all of the following
@@ -100,7 +100,7 @@ pub fn setup() {
         let kmem = KMEM_HEAD.as_mut().unwrap();
         kmem.set_free();
         kmem.set_size(KMEM_ALLOC * PAGE_SIZE);
-        KMEM_PAGE_TABLE = zalloc(1).unwrap() as *mut PageTable;
+        KMEM_PAGE_TABLE = zalloc(1).unwrap() as *mut PageTableUntyped;
         // KMEM_PAGE_TABLE.initialize();
     }
 }
