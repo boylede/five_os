@@ -186,6 +186,30 @@ pub struct EntryFlags {
 }
 
 impl EntryFlags {
+    pub const READ: EntryFlags = EntryFlags {
+        permissions: PermFlags::ReadOnly,
+        software: SoftFlags(0),
+        user: false,
+        global: false,
+    };
+    pub const READ_WRITE: EntryFlags = EntryFlags {
+        permissions: PermFlags::ReadWrite,
+        software: SoftFlags(0),
+        user: false,
+        global: false,
+    };
+    pub const USER_READ_WRITE: EntryFlags = EntryFlags {
+        permissions: PermFlags::ReadWrite,
+        software: SoftFlags(0),
+        user: true,
+        global: false,
+    };
+    pub const READ_EXECUTE: EntryFlags = EntryFlags {
+        permissions: PermFlags::ReadExecute,
+        software: SoftFlags(0),
+        user: false,
+        global: false,
+    };
     /// Puts each bitflag into the lower 9 bits of a usize,
     /// ready for insertion into any type of page table entry
     /// also sets valid flag
@@ -197,22 +221,6 @@ impl EntryFlags {
     }
     pub fn software(&mut self) -> &mut SoftFlags {
         &mut self.software
-    }
-    pub fn new_rw() -> EntryFlags {
-        EntryFlags {
-            permissions: PermFlags::ReadWrite,
-            software: SoftFlags(0),
-            user: false,
-            global: false,
-        }
-    }
-    pub fn new_re() -> EntryFlags {
-        EntryFlags {
-            permissions: PermFlags::ReadExecute,
-            software: SoftFlags(0),
-            user: false,
-            global: false,
-        }
     }
     pub fn set_branch(&mut self) {
         self.permissions = PermFlags::Leaf;

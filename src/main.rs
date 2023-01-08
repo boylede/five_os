@@ -5,10 +5,11 @@
 use core::arch::asm;
 
 use five_os::{
+    cpu::plic::PLIC,
     mem::{page::zalloc, PAGE_SIZE},
     mmu::print_map,
     trap::TrapFrame,
-    *, cpu::plic::PLIC,
+    *,
 };
 
 use layout::StaticLayout;
@@ -35,7 +36,7 @@ extern "C" fn kinit() {
         // map kernel page table
         let kpt = kernel_page_table as *const mmu::PageTable as usize;
         println!("Kernel root page table: {:x}", kpt);
-        mmu::identity_map_range(kernel_page_table, kpt, kpt, EntryFlags::new_rw());
+        mmu::identity_map_range(kernel_page_table, kpt, kpt, EntryFlags::READ_WRITE);
     }
     {
         // map kernel's dynamic memory
@@ -43,7 +44,7 @@ extern "C" fn kinit() {
         let page_count = kmem::allocation_count();
         let end = kernel_heap + page_count * PAGE_SIZE;
         println!("Dynamic Memory: {:x} -> {:x}  RW", kernel_heap, end);
-        mmu::identity_map_range(kernel_page_table, kernel_heap, end, EntryFlags::new_rw());
+        mmu::identity_map_range(kernel_page_table, kernel_heap, end, EntryFlags::READ_WRITE);
     }
     {
         // map allocation 'bitmap'
@@ -57,7 +58,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             layout.heap_start,
             layout.heap_start + page_count,
-            EntryFlags::new_re(),
+            EntryFlags::READ_EXECUTE,
         );
     }
     {
@@ -70,7 +71,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             layout.text_start,
             layout.text_end,
-            EntryFlags::new_re(),
+            EntryFlags::READ_EXECUTE,
         );
     }
     {
@@ -84,7 +85,7 @@ extern "C" fn kinit() {
             layout.rodata_start,
             layout.rodata_end,
             // probably overlaps with text, so keep execute bit on
-            EntryFlags::new_re(),
+            EntryFlags::READ_EXECUTE,
         );
     }
     {
@@ -97,7 +98,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             layout.data_start,
             layout.data_end,
-            EntryFlags::new_rw(),
+            EntryFlags::READ_WRITE,
         );
     }
     {
@@ -110,7 +111,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             layout.bss_start,
             layout.bss_end,
-            EntryFlags::new_rw(),
+            EntryFlags::READ_WRITE,
         );
     }
     {
@@ -123,7 +124,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             layout.stack_start,
             layout.stack_end,
-            EntryFlags::new_rw(),
+            EntryFlags::READ_WRITE,
         );
     }
     {
@@ -138,7 +139,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             mm_hardware_start,
             mm_hardware_end,
-            EntryFlags::new_rw(),
+            EntryFlags::READ_WRITE,
         );
     }
     {
@@ -153,7 +154,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             mm_hardware_start,
             mm_hardware_end,
-            EntryFlags::new_rw(),
+            EntryFlags::READ_WRITE,
         );
     }
     {
@@ -168,7 +169,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             mm_hardware_start,
             mm_hardware_end,
-            EntryFlags::new_rw(),
+            EntryFlags::READ_WRITE,
         );
     }
     {
@@ -183,7 +184,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             mm_hardware_start,
             mm_hardware_end,
-            EntryFlags::new_rw(),
+            EntryFlags::READ_WRITE,
         );
     }
 
@@ -210,7 +211,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             trap_stack,
             trap_stack + PAGE_SIZE,
-            EntryFlags::new_rw(),
+            EntryFlags::READ_WRITE,
         );
 
         let global_trapframe_address = unsafe {
@@ -230,7 +231,7 @@ extern "C" fn kinit() {
             kernel_page_table,
             global_trapframe_address,
             global_trapframe_address + PAGE_SIZE,
-            EntryFlags::new_rw(),
+            EntryFlags::READ_WRITE,
         );
     }
 
@@ -251,14 +252,12 @@ extern "C" fn kinit() {
 extern "C" fn kmain() {
     println!("entering kmain");
 
-	PLIC.set_threshold(0);
-	PLIC.enable_interrupt(10);
-	PLIC.set_priority(10, 1);
+    PLIC.set_threshold(0);
+    PLIC.enable_interrupt(10);
+    PLIC.set_priority(10, 1);
 
     println!("reached end, looping");
-    loop {
-
-    }
+    loop {}
 }
 
 #[no_mangle]

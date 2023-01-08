@@ -29,6 +29,9 @@ impl TrapFrame {
         trap_stack: null_mut(),
         hartid: 0,
     };
+    pub const fn zero() -> TrapFrame {
+        TrapFrame::NULL
+    }
 }
 
 /// Global store of trapframes, one per core/hart. we're providing for 4 harts here.

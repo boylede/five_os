@@ -9,6 +9,7 @@ pub mod layout;
 pub mod logo;
 pub mod mem;
 pub mod mmu;
+pub mod process;
 pub mod trap;
 
 #[no_mangle]
