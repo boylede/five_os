@@ -1,3 +1,4 @@
+.option push
 .option norvc
 .section .text
 
@@ -21,8 +22,8 @@
 .endm
 
 
-.global asm_trap_vector
 .align 4
+.global asm_trap_vector
 asm_trap_vector:
 .option push
 .option norelax # ensures the following assembly is not relaxed by the linker
@@ -60,4 +61,8 @@ asm_trap_vector:
 .endr
 
 .option pop
+.global trapbreak
+trapbreak:
 	mret
+
+.option pop

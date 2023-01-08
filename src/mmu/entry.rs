@@ -45,14 +45,17 @@ impl Entry {
     pub fn is_dirty(&self) -> bool {
         self.0 & 0b1000000 == 0b1000000
     }
-    pub fn get_rsw(&self) -> (bool,bool) {
-        (self.0 & 0b10000000 == 0b10000000, self.0 & 0b100000000 == 0b100000000)
+    pub fn get_rsw(&self) -> (bool, bool) {
+        (
+            self.0 & 0b10000000 == 0b10000000,
+            self.0 & 0b100000000 == 0b100000000,
+        )
     }
 
     pub fn is_branch(&self) -> bool {
         self.is_valid() && !self.is_readable() && !self.is_executable() && !self.is_writable()
     }
-    
+
     pub fn get_flags() -> EntryFlags {
         todo!();
     }
@@ -149,7 +152,7 @@ impl core::fmt::Debug for Entry {
         if self.is_valid() {
             let user = self.is_user();
             let global = self.is_global();
-            let (a,b) = self.get_rsw();
+            let (a, b) = self.get_rsw();
             let accessed = self.is_accessed();
             let dirty = self.is_dirty();
             if self.is_branch() {

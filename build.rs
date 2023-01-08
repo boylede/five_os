@@ -16,7 +16,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let filename = asm_dir.join(file);
         println!("cargo:rerun-if-changed={}", filename.display());
         builder.file(filename);
-        
     }
 
     builder.compile("asm");

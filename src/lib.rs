@@ -1,5 +1,5 @@
 #![no_std]
-#![feature(panic_info_message, allocator_api, alloc_error_handler)]
+#![feature(fn_align, panic_info_message, allocator_api, alloc_error_handler)]
 
 pub mod console;
 pub mod cpu_status;
