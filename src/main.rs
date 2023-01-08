@@ -2,7 +2,14 @@
 #![no_main]
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
 
-use five_os::{mem::PAGE_SIZE, *, mmu::print_map};
+use core::arch::asm;
+
+use five_os::{
+    mem::{page::zalloc, PAGE_SIZE},
+    mmu::print_map,
+    trap::TrapFrame,
+    *,
+};
 
 use layout::StaticLayout;
 use mmu::EntryFlags;
@@ -15,12 +22,13 @@ extern "C" fn kinit() {
     cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
     layout::layout_sanity_check();
-    
+
     let layout = StaticLayout::get();
     mem::bitmap::setup();
     kmem::setup();
     mmu::setup();
     let kernel_page_table = kmem::get_page_table();
+    //let page_table_erased = kernel_page_table as *const _ as usize;
 
     println!("---------- Kernel Space Identity Map ----------");
     {
@@ -178,18 +186,77 @@ extern "C" fn kinit() {
             EntryFlags::new_rw(),
         );
     }
-    
-    println!("Finished identity map of kernel memory, printing:");
+
+    // set up mmu satp value; todo: do this elsewhere / via zst interface
+    let root_ppn = (kernel_page_table as *const _ as usize) >> 12;
+    let satp_val = 8 << 60 | root_ppn;
+
+    {
+        // reserve some space for trap frames
+        // and put the address in mscratch
+        // (and sscratch)
+        // to be used in trap.s
+
+        // get a page for the trap stack frame
+        // todo: this could be in kmem init instead
+        let trap_stack =
+            zalloc(1).expect("failed to initialize trap stack") as *mut [_] as *mut u8 as usize;
+        println!(
+            "Trap stack: {:x} -> {:x}  RW",
+            trap_stack,
+            trap_stack + PAGE_SIZE
+        );
+        mmu::identity_map_range(
+            kernel_page_table,
+            trap_stack,
+            trap_stack + PAGE_SIZE,
+            EntryFlags::new_rw(),
+        );
+
+        let global_trapframe_address = unsafe {
+            // Safety: we are accessing a static mut. we are safe in kinit
+            // because we are the only thing running
+            let frame: &mut TrapFrame = &mut trap::GLOBAL_TRAPFRAMES[0];
+            frame.satp = satp_val;
+            frame.trap_stack = (trap_stack + PAGE_SIZE) as *mut _;
+            let global_trapframe_address = frame as *mut TrapFrame as usize;
+
+            asm!("csrw mscratch, {}", in(reg) global_trapframe_address);
+            asm!("csrw sscratch, {}", in(reg) global_trapframe_address);
+            global_trapframe_address
+        };
+
+        mmu::identity_map_range(
+            kernel_page_table,
+            global_trapframe_address,
+            global_trapframe_address + PAGE_SIZE,
+            EntryFlags::new_rw(),
+        );
+    }
+
+    println!("Finished identity map of kernel memory");
     mem::bitmap::print_mem_bitmap();
-    
+
     // print_map(kernel_page_table);
     println!("done with kinit");
+
+    println!("setting satp to {:x}", satp_val);
+    unsafe {
+        asm!("csrw satp, {}", in(reg) satp_val);
+        asm!("sfence.vma zero, {}", in(reg)0);
+    }
 }
 
 #[no_mangle]
 extern "C" fn kmain() {
     println!("entering kmain");
-    
+
     println!("reached end");
+    abort();
+}
+
+#[no_mangle]
+extern "C" fn kinit_hart() {
+    println!("entering hart kinit");
     abort();
 }
