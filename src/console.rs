@@ -9,7 +9,7 @@
 macro_rules! print {
     ($($args:tt)+) => ({
         use core::fmt::Write;
-        let _ = write!($crate::uart::Uart::default(), $($args)+);
+        let _ = write!($crate::cpu::uart::Uart::default(), $($args)+);
     });
 }
 #[macro_export]

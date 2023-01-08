@@ -1,6 +1,8 @@
 /// Uart driver for riscv virtio spec
 use core::fmt::{Error, Write};
 
+const BASE_ADDRESS: usize = 0x1000_0000;
+
 pub struct Uart {
     base_address: *mut u8,
 }
@@ -47,7 +49,7 @@ impl Uart {
 impl Default for Uart {
     fn default() -> Uart {
         Uart {
-            base_address: 0x1000_0000 as *mut u8,
+            base_address: BASE_ADDRESS as *mut u8,
         }
     }
 }

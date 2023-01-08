@@ -1,5 +1,7 @@
 use core::ptr::null_mut;
 
+use crate::cpu::plic::PLIC;
+use crate::cpu::uart::Uart;
 use crate::layout::StaticLayout;
 use crate::{abort, print, println};
 
@@ -104,20 +106,44 @@ extern "C" fn rust_trap(
     let cause = TrapCause(acause);
     let mut return_pc = epc;
     let cause_number = cause.number();
-    println!("entered trap handler with cause {}", cause_number);
     if cause.is_async() {
         match cause_number {
             3 => {
-                println!("Machine software interrupt CPU#{}", hart);
+                println!("Machine software interrupt: #{}", hart);
             }
             7 => {
-                println!("Machine timer interrupt CPU#{}", hart);
+                println!("Machine timer interrupt: #{}", hart);
             }
             11 => {
-                println!("Machine external interrupt CPU#{}", hart);
+                if let Some(interrupt) = PLIC.claim() {
+                    match interrupt.number() {
+                        10 => {
+                            // on qemu/virtio this is the UART singaling input
+                            // todo: can these match statements be extricated from the trap handler logic
+                            // so different hardware can be supported by compile options
+                            if let Some(c) = Uart::default().get() {
+                                match c {
+                                    8 => {
+                                        print!("\x08 \x08");
+                                    }
+                                    10 | 13 => {
+                                        println!("");
+                                    }
+                                    _ => {
+                                        print!("{}", c as char);
+                                    }
+                                }
+                            }
+                        }
+                        _ => (),
+                    }
+                    PLIC.complete(interrupt);
+                } else {
+                    println!("Machine external interrupt: #{}", hart);
+                }
             }
             _ => {
-                panic!("Unhandled async trap CPU#{} -> {}\n", hart, cause_number);
+                panic!("Unhandled async trap: #{} -> {}\n", hart, cause_number);
             }
         }
     } else {

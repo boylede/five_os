@@ -2,6 +2,7 @@
 #![feature(fn_align, panic_info_message, allocator_api, alloc_error_handler)]
 
 pub mod console;
+pub mod cpu;
 pub mod cpu_status;
 pub mod kmem;
 pub mod layout;
@@ -9,7 +10,6 @@ pub mod logo;
 pub mod mem;
 pub mod mmu;
 pub mod trap;
-pub mod uart;
 
 #[no_mangle]
 extern "C" fn eh_personality() {}

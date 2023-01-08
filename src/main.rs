@@ -8,7 +8,7 @@ use five_os::{
     mem::{page::zalloc, PAGE_SIZE},
     mmu::print_map,
     trap::TrapFrame,
-    *,
+    *, cpu::plic::PLIC,
 };
 
 use layout::StaticLayout;
@@ -17,7 +17,7 @@ use mmu::EntryFlags;
 /// Our first entry point out of the assembly boot.s
 #[no_mangle]
 extern "C" fn kinit() {
-    uart::Uart::default().init();
+    cpu::uart::Uart::default().init();
     logo::print_logo();
     cpu_status::print_cpu_info();
     cpu_status::print_misa_info();
@@ -251,8 +251,14 @@ extern "C" fn kinit() {
 extern "C" fn kmain() {
     println!("entering kmain");
 
-    println!("reached end");
-    abort();
+	PLIC.set_threshold(0);
+	PLIC.enable_interrupt(10);
+	PLIC.set_priority(10, 1);
+
+    println!("reached end, looping");
+    loop {
+
+    }
 }
 
 #[no_mangle]
