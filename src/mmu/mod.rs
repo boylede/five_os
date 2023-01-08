@@ -40,17 +40,19 @@ unsafe fn get_global_descriptor() -> &'static PageTableDescriptor {
 
 /// Abstraction over any MMU-backed page table type
 #[repr(transparent)]
-pub struct PageTable(Page);
+pub struct PageTable{
+    inner: [u8; PAGE_SIZE]
+}
 
 impl PageTable {
-    pub fn entry(&self, index: usize, size: usize) -> &Entry {
+    pub fn entry(&self, index: usize, size: usize) -> &GenericPageTableEntry {
         // ((&mut (self.0).0[index * size]) as *mut _) as *mut usize
         let address = (self as *const PageTable) as usize + (index * size);
-        unsafe { Entry::at_address(address) }
+        unsafe { GenericPageTableEntry::at_address(address) }
     }
-    pub fn entry_mut(&mut self, index: usize, size: usize) -> &mut Entry {
+    pub fn entry_mut(&mut self, index: usize, size: usize) -> &mut GenericPageTableEntry {
         let address = (self as *mut PageTable) as usize + (index * size);
-        unsafe { Entry::at_address_mut(address) }
+        unsafe { GenericPageTableEntry::at_address_mut(address) }
     }
     pub fn map(&mut self, virt: usize, phys: usize, size: usize, flags: EntryFlags) {
         let descriptor = unsafe {get_global_descriptor()};
@@ -139,7 +141,7 @@ fn traverse(
 
     // 2) let pte be the value of the page table entry at address a + va.vpn[i]*PTESIZE
     let va_vpni = extract_bits(virtual_address, &vpn_segments[level]);
-    let pte: &Entry = unsafe {
+    let pte: &GenericPageTableEntry = unsafe {
         // SAFETY: we are converting an arbitrary memory address to a usize reference,
         // so we need to be sure that the memory address is a) initialized,
         // b) contents valid for usize, c) aligned for usize, and d) no concurrent
@@ -158,16 +160,16 @@ fn traverse(
         // returned from that function, but we will check here to be sure
         assert!(entry_offset <= table_size - pte_size);
         // ((a + entry_offset) as *const usize).as_ref().unwrap()
-        Entry::at_address(a + entry_offset)
+        GenericPageTableEntry::at_address(a + entry_offset)
     };
     // 3) if page table valid bit not set, or if read/write bits set inconsistently, stop
-    if !pte.is_valid() || pte.is_invalid() {
+    if !pte.copy_flags().is_valid() || pte.copy_flags().is_invalid() {
         panic!("invalid page table entry");
     }
     // 4) now we know the entry is valid, check if it is readable or executable. if not, it is a branch
     // if it is a leaf, proceed to step 5, otherwise decrement i, checking that i wasn't 0 first,
     // and continue from step 2 after setting a to the next page table based on this pte
-    if pte.is_readable() || pte.is_executable() {
+    if pte.copy_flags().is_readable() || pte.copy_flags().is_executable() {
         // 5) pte is a leaf.
         // spec describes checking if the memory access is allowed, but that is for the hardware implementation
         // we will just return the address
@@ -314,13 +316,13 @@ fn map(
     let vpn = extract_bits(virtual_address, &descriptor.virtual_segments[level]);
     // let ppn = extract_bits(physical_address, &descriptor.physical_segments[level]);
     // println!("entry index (vpn segment at {}): {:x}", level, vpn);
-    let entry: &mut Entry = table.entry_mut(vpn, descriptor.entry_size);
+    let entry: &mut GenericPageTableEntry = table.entry_mut(vpn, descriptor.entry_size);
     // let entry = unsafe { entry.as_mut().unwrap() };
 
     match page_size.to_level().cmp(&level) {
         Ordering::Equal => {
             // println!("we have reached deepest level needed for this page table size, ready to write entry");
-            if entry.is_valid() {
+            if entry.copy_flags().is_valid() {
                 // println!("writing physical address {:x} to virtual address {:x}, entry is already occupied with physical address {:x}", physical_address, virtual_address, entry.get_address(descriptor));
                 if physical_address != entry.get_address(descriptor) {
                     panic!("attempted to overwrite existing mmu page table entry");
@@ -342,7 +344,7 @@ fn map(
                 panic!("Invalid map attempt");
             }
 
-            if !entry.is_valid() {
+            if !entry.copy_flags().is_valid() {
                 // println!("we reached an empty entry, allocating a page for it");
                 // check if this entry is valid
                 // if not, zalloc a page to store the next page table
@@ -416,7 +418,7 @@ fn unmap(table: &mut PageTable, descriptor: &PageTableDescriptor, level: usize) 
         //     .as_mut()
         //     .unwrap()
         // };
-        if entry.is_branch() {
+        if entry.copy_flags().is_branch() {
             if level != 0 {
                 let page = extract_bits(entry.raw(), &descriptor.page_segments[level]) << 12;
                 let next_table = unsafe { (page as *mut PageTable).as_mut().unwrap() };
@@ -520,7 +522,7 @@ fn inner_print_map(
     for index in 0..descriptor.size / descriptor.entry_size {
         let resulting_address = base_address + (index * page_size);
         let entry = table.entry(index, descriptor.entry_size);
-        if entry.is_valid() {
+        if entry.copy_flags().is_valid() {
             println!(
                 "{}-{}: 0x{:x}-0x{:x}: {:?}",
                 descent,
@@ -529,7 +531,7 @@ fn inner_print_map(
                 resulting_address + page_size - 1,
                 entry
             );
-            if entry.is_branch() {
+            if entry.copy_flags().is_branch() {
                 // println!("branching");
                 let next = entry.get_address(descriptor);
                 let next_table = unsafe { (next as *const PageTable).as_ref().unwrap() };

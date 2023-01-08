@@ -1,63 +1,33 @@
 use super::PageTable;
 use super::PageTableDescriptor;
 
+
+/// testing out a trait-based interface to the page table entries
+pub trait PTEntry {
+    /// copy the flags out of the entry for inspection
+    fn extract_flags(&self) -> EntryFlags;
+    /// overwrite the flags with the ones provided
+    fn write_flags(&mut self, flags: EntryFlags);
+    /// returns a 32-bit address, if appropriate for table type
+    fn address_limited(&self) -> Option<u32>;
+    /// returns the address in 64 bits
+    fn address(&self) -> u64;
+    fn extract_extended_flags(&self) -> ExtendedFlags;
+    fn write_extended_flags(&self) -> ExtendedFlags;
+}
+
 #[repr(transparent)]
-pub struct Entry(usize);
+pub struct GenericPageTableEntry(usize);
 
-impl Entry {
-    /// check lowest bit is set
-    pub fn is_valid(&self) -> bool {
-        self.0 & 0b1 == 1
+impl GenericPageTableEntry {
+    #[inline]
+    pub const fn copy_flags(&self) -> EntryFlags {
+        // write lower 10 bits of entry into EntryFlags
+        EntryFlags { inner: (self.0 & (1 << 10) -1) as u16 }
     }
-
-    /// checks read & write bits not inconsistant
-    pub fn is_invalid(&self) -> bool {
-        self.is_readable() && !self.is_writable()
-    }
-
-    pub fn invalidate(&mut self) {
-        self.0 = 0;
-    }
-
-    /// checks bit 1 is set
-    pub fn is_readable(&self) -> bool {
-        self.0 & 0b10 == 0b10
-    }
-
-    /// checks bit x is set
-    pub fn is_writable(&self) -> bool {
-        self.0 & 0b100 == 0b100
-    }
-
-    /// checks bit 3 is set
-    pub fn is_executable(&self) -> bool {
-        self.0 & 0b1000 == 0b1000
-    }
-    pub fn is_user(&self) -> bool {
-        self.0 & 0b10000 == 0b10000
-    }
-    pub fn is_global(&self) -> bool {
-        self.0 & 0b100000 == 0b100000
-    }
-    pub fn is_accessed(&self) -> bool {
-        self.0 & 0b1000000 == 0b1000000
-    }
-    pub fn is_dirty(&self) -> bool {
-        self.0 & 0b1000000 == 0b1000000
-    }
-    pub fn get_rsw(&self) -> (bool, bool) {
-        (
-            self.0 & 0b10000000 == 0b10000000,
-            self.0 & 0b100000000 == 0b100000000,
-        )
-    }
-
-    pub fn is_branch(&self) -> bool {
-        self.is_valid() && !self.is_readable() && !self.is_executable() && !self.is_writable()
-    }
-
-    pub fn get_flags() -> EntryFlags {
-        todo!();
+    /// clear lowest bit
+    pub const fn invalidate(&mut self) {
+        self.0 &= !1;
     }
 
     /// produce a page table entry based on the provided descriptor,
@@ -69,8 +39,8 @@ impl Entry {
             let mask = ((1 << bit_width) - 1) << offset;
             bits = (address << offset) & mask;
         }
-        bits |= flags.to_entry();
-        Entry(bits)
+        bits |= flags.as_u16() as usize;
+        GenericPageTableEntry(bits)
     }
     pub fn raw(&self) -> usize {
         self.0
@@ -101,18 +71,18 @@ impl Entry {
             let mask = ((1 << bit_width) - 1) << offset;
             bits = (address << offset) & mask;
         }
-        bits |= flags.to_entry();
+        bits |= flags.as_u16() as usize;
         // println!("{:x}", bits);
         self.0 = bits;
     }
     pub fn from_raw(entry: usize) -> Self {
-        Entry(entry)
+        GenericPageTableEntry(entry)
     }
     pub(super) unsafe fn at_address<'a>(address: usize) -> &'a Self {
-        (address as *const Entry).as_ref().unwrap()
+        (address as *const GenericPageTableEntry).as_ref().unwrap()
     }
     pub(super) unsafe fn at_address_mut<'a>(address: usize) -> &'a mut Self {
-        (address as *mut Entry).as_mut().unwrap()
+        (address as *mut GenericPageTableEntry).as_mut().unwrap()
     }
     pub(super) unsafe fn child_table(&self, descriptor: &PageTableDescriptor) -> &PageTable {
         let mut address = 0;
@@ -147,20 +117,20 @@ fn write_char(b: bool, c: char, f: &mut core::fmt::Formatter<'_>) -> core::fmt::
     }
 }
 
-impl core::fmt::Debug for Entry {
+impl core::fmt::Debug for GenericPageTableEntry {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        if self.is_valid() {
-            let user = self.is_user();
-            let global = self.is_global();
-            let (a, b) = self.get_rsw();
-            let accessed = self.is_accessed();
-            let dirty = self.is_dirty();
-            if self.is_branch() {
+        if self.copy_flags().is_valid() {
+            let user = self.copy_flags().is_user();
+            let global = self.copy_flags().is_global();
+            let (a, b) = self.copy_flags().read_softflags();
+            let accessed = self.copy_flags().is_accessed();
+            let dirty = self.copy_flags().is_dirty();
+            if self.copy_flags().is_branch() {
                 write!(f, "branch")
             } else {
-                write_char(self.is_readable(), 'r', f)?;
-                write_char(self.is_writable(), 'w', f)?;
-                write_char(self.is_executable(), 'e', f)?;
+                write_char(self.copy_flags().is_readable(), 'r', f)?;
+                write_char(self.copy_flags().is_writable(), 'w', f)?;
+                write_char(self.copy_flags().is_executable(), 'e', f)?;
                 write!(f, "-")?;
                 write_char(user, 'U', f)?;
                 write_char(global, 'G', f)?;
@@ -177,90 +147,177 @@ impl core::fmt::Debug for Entry {
     }
 }
 
+/// unimplemented boilerplate for the top 10 bits in larger page table entries
+#[derive(Clone, Copy)]
+pub struct ExtendedFlags {
+    inner: u16,
+}
+
+/// low 10 bits in all currently specified page table entry types
 #[derive(Clone, Copy)]
 pub struct EntryFlags {
-    permissions: PermFlags,
-    software: SoftFlags,
-    user: bool,
-    global: bool,
+    inner: u16,
 }
 
 impl EntryFlags {
-    pub const READ: EntryFlags = EntryFlags {
-        permissions: PermFlags::ReadOnly,
-        software: SoftFlags(0),
-        user: false,
-        global: false,
-    };
-    pub const READ_WRITE: EntryFlags = EntryFlags {
-        permissions: PermFlags::ReadWrite,
-        software: SoftFlags(0),
-        user: false,
-        global: false,
-    };
-    pub const USER_READ_WRITE: EntryFlags = EntryFlags {
-        permissions: PermFlags::ReadWrite,
-        software: SoftFlags(0),
-        user: true,
-        global: false,
-    };
-    pub const READ_EXECUTE: EntryFlags = EntryFlags {
-        permissions: PermFlags::ReadExecute,
-        software: SoftFlags(0),
-        user: false,
-        global: false,
-    };
-    /// Puts each bitflag into the lower 9 bits of a usize,
-    /// ready for insertion into any type of page table entry
-    /// also sets valid flag
-    pub fn to_entry(self) -> usize {
-        0b1 | // set valid bit
-        (self.permissions as usize) << 1 |
-        (self.user as usize) << 4 |
-        (self.global as usize) << 5
+    #[inline]
+    pub const fn new() -> EntryFlags {
+        EntryFlags { inner: 0 }
     }
-    pub fn software(&mut self) -> &mut SoftFlags {
-        &mut self.software
+    #[inline]
+    pub const fn is_valid(&self) -> bool {
+        self.inner & (1 << 0) != 0
     }
-    pub fn set_branch(&mut self) {
-        self.permissions = PermFlags::Leaf;
+    /// Checks if RWE bits are set wrongly
+    #[inline]
+    pub const fn is_invalid(&self) -> bool {
+        !self.is_readable() && (self.is_writable() || self.is_executable())
     }
-}
+    #[inline]
+    pub const fn is_readable(&self) -> bool {
+        self.inner & (1 << 1) != 0
+    }
+    #[inline]
+    pub const fn is_writable(&self) -> bool {
+        self.inner & (1 << 2) != 0
+    }
+    #[inline]
+    pub const fn is_executable(&self) -> bool {
+        self.inner & (1 << 3) != 0
+    }
+    #[inline]
+    pub const fn is_user(&self) -> bool {
+        self.
+        inner & (1 << 4) != 0
+    }
+    #[inline]
+    pub const fn is_global(&self) -> bool {
+        self.inner & (1 << 5) != 0
+    }
+    #[inline]
+    pub const fn is_accessed(&self) -> bool {
+        self.inner & (1 << 6) != 0
+    }
+    #[inline]
+    pub const fn is_dirty(&self) -> bool {
+        self.inner & (1 << 7) != 0
+    }
+    #[inline]
+    pub const fn read_softflags(&self) -> (bool, bool) {
+        (self.inner & (1 << 8) != 0, self.inner & (1 << 9) != 0)
+    }
+    #[inline]
+    pub const fn is_branch(&self) -> bool {
+        self.is_valid() && !self.is_readable() && !self.is_writable() && ! self.is_executable()
+    }
 
-/// Permissions flags in a page table entry.
-#[derive(Clone, Copy)]
-enum PermFlags {
-    Leaf = 0b000,
-    ReadOnly = 0b001,
-    ReadWrite = 0b011,
-    ReadWriteExecute = 0b111,
-    ReadExecute = 0b101,
-}
+#[inline]
+    pub const fn set_valid(&mut self, flag: bool) {
+        let flag = if flag { 1 } else { 0 };
+        self.inner |= flag << 0;
+    }
+    #[inline]
+    pub const fn set_readable(&mut self, flag: bool) {
+        let flag = if flag { 1 } else { 0 };
+        self.inner |= flag << 1;
+    }
+    #[inline]
+    pub const fn set_writable(&mut self, flag: bool) {
+        let flag = if flag { 1 } else { 0 };
+        self.inner |= flag << 2;
+    }
+    #[inline]
+    pub const fn set_executable(&mut self, flag: bool) {
+        let flag = if flag { 1 } else { 0 };
+        self.inner |= flag << 3;
+    }
+    #[inline]
+    pub const fn set_user(&mut self, flag: bool) {
+        let flag = if flag { 1 } else { 0 };
+        self.inner |= flag << 4;
+    }
+    #[inline]
+    pub const fn set_global(&mut self, flag: bool) {
+        let flag = if flag { 1 } else { 0 };
+        self.inner |= flag << 5;
+    }
+    #[inline]
+    pub const fn set_accessed(&mut self, flag: bool) {
+        let flag = if flag { 1 } else { 0 };
+        self.inner |= flag << 6;
+    }
+    #[inline]
+    pub const fn set_dirty(&mut self, flag: bool) {
+        let flag = if flag { 1 } else { 0 };
+        self.inner |= flag << 7;
+    }
+    #[inline]
+    pub const fn set_softflags(&mut self, flag: (bool, bool)) {
+        let flag = match flag {
+            (true, true) => 0b11,
+            (true, false) => 0b10,
+            (false, true) => 0b01,
+            (false, false) => 0b000,
+        };
+        self.inner |= flag << 8;
+    }
+    /// clears the RWE bits, leaving valid bit alone
+    #[inline]
+    pub const fn set_branch(&mut self) {
+        self.inner = self.inner & !0xE;
+    }
+    #[inline]
+    pub const fn with_valid(mut self, flag: bool) -> EntryFlags {
+        self.set_valid(flag);
+        self
+    }
+    #[inline]
+    pub const fn with_readable(mut self, flag: bool) -> EntryFlags {
+        self.set_readable(flag);
+        self
+    }
+    #[inline]
+    pub const fn with_writable(mut self, flag: bool) -> EntryFlags {
+        self.set_writable(flag);
+        self
+    }
+    #[inline]
+    pub const fn with_executable(mut self, flag: bool) -> EntryFlags {
+        self.set_executable(flag);
+        self
+    }
+    #[inline]
+    pub const fn with_user(mut self, flag: bool) -> EntryFlags {
+        self.set_user(flag);
+        self
+    }
+    #[inline]
+    pub const fn with_global(mut self, flag: bool) -> EntryFlags {
+        self.set_global(flag);
+        self
+    }
+    #[inline]
+    pub const fn with_accessed(mut self, flag: bool) -> EntryFlags {
+        self.set_accessed(flag);
+        self
+    }
+    #[inline]
+    pub const fn with_dirty(mut self, flag: bool) -> EntryFlags {
+        self.set_dirty(flag);
+        self
+    }
+    #[inline]
+    pub const fn with_softflags(mut self, flag: (bool, bool)) -> EntryFlags {
+        self.set_softflags(flag);
+        self
+    }
+    #[inline]
+    pub const fn as_u16(self) -> u16 {
+        self.inner
+    }
+    pub const READ: EntryFlags = EntryFlags::new().with_valid(true).with_readable(true);
+    pub const READ_WRITE: EntryFlags = EntryFlags::READ.with_writable(true);
+    pub const USER_READ_WRITE: EntryFlags = EntryFlags::READ_WRITE.with_user(true);
+    pub const READ_EXECUTE: EntryFlags = EntryFlags::READ.with_executable(true);
 
-/// Placeholder for the 2 software-defined bits allowed in the mmu's page table entries
-#[derive(Clone, Copy, Default)]
-pub struct SoftFlags(u8);
-
-impl SoftFlags {
-    fn set(&mut self, value: u8) {
-        self.0 = value & 0b11;
-    }
-    fn get(&self) -> u8 {
-        self.0
-    }
-    fn clear(&mut self) {
-        self.0 = 0
-    }
-    fn set_a(&mut self) {
-        self.0 |= 0b01
-    }
-    fn set_b(&mut self) {
-        self.0 |= 0b10
-    }
-    fn get_a(&mut self) -> bool {
-        self.0 & 0b01 == 0b01
-    }
-    fn get_b(&mut self) -> bool {
-        self.0 & 0b10 == 0b10
-    }
 }
