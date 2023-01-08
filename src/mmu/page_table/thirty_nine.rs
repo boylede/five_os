@@ -1,6 +1,6 @@
-use crate::mmu::{BitGroup, PageTableDescriptor};
+use super::descriptor::{BitGroup, PageTableDescriptor};
 
-pub(super) const SV_THIRTY_NINE: PageTableDescriptor = PageTableDescriptor {
+pub const SV_THIRTY_NINE: PageTableDescriptor = PageTableDescriptor {
     size: PAGESIZE,
     levels: LEVELS,
     entry_size: PTESIZE,

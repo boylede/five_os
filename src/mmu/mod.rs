@@ -7,16 +7,17 @@ use crate::mem::{PAGE_ADDR_MASK, PAGE_SIZE};
 use crate::{print, println};
 
 mod entry;
-mod forty_eight;
-mod thirty_nine;
-mod thirty_two;
 
-use forty_eight::SV_FORTY_EIGHT;
-use thirty_nine::SV_THIRTY_NINE;
-use thirty_two::SV_THIRTY_TWO;
+mod page_table;
+
+use page_table::forty_eight::SV_FORTY_EIGHT;
+use page_table::thirty_nine::SV_THIRTY_NINE;
+use page_table::thirty_two::SV_THIRTY_TWO;
 
 pub use entry::EntryFlags;
 use entry::*;
+
+use self::page_table::descriptor::PageTableDescriptor;
 
 extern "C" {
     fn asm_get_satp() -> usize;
@@ -99,51 +100,6 @@ impl PageSize {
     pub fn to_level(&self) -> usize {
         *self as usize
     }
-}
-
-pub(self) struct PageTableDescriptor {
-    /// the size of the page table, in bytes (always 4096)
-    size: usize,
-    /// the number of levels of page tables
-    levels: usize,
-    /// the size of an entry, in bytes
-    entry_size: usize,
-    /// description of the "virtual page number" field of virtual addresses
-    virtual_segments: &'static [BitGroup],
-    /// description of the "physical page number" field of page table entries
-    page_segments: &'static [BitGroup],
-    /// description of the "physical page number" field of physical addresses
-    physical_segments: &'static [BitGroup],
-}
-
-impl PageTableDescriptor {
-    pub fn virtual_address_size(&self) -> usize {
-        self.virtual_segments
-            .iter()
-            .map(|(bits, _)| *bits)
-            .sum::<usize>()
-            + 12
-    }
-    pub fn physical_address_size(&self) -> usize {
-        self.physical_segments
-            .iter()
-            .map(|(bits, _)| *bits)
-            .sum::<usize>()
-            + 12
-    }
-}
-
-/// a Newtype of a tuple (usize, usize) which are (size, offset) where size is #
-/// of bits and offset is the bit address of the lowest bit in the group.
-type BitGroup = (usize, usize);
-
-pub(self) fn collapse_descriptor(segments: &[BitGroup]) -> BitGroup {
-    let mut size = 0;
-    for group in segments {
-        let (gsize, _) = group;
-        size += gsize;
-    }
-    (size, segments[0].1)
 }
 
 fn traverse_root(
