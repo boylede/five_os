@@ -1,5 +1,5 @@
-use super::PageTableUntyped;
 use super::PageTableDescriptor;
+use super::PageTableUntyped;
 use super::TableTypes;
 
 /// testing out a trait-based interface to the page table entries
@@ -16,7 +16,6 @@ pub trait PTEntryRead {
     fn extract_segment(&self, level: usize) -> u64;
 }
 
-
 /// testing out a trait-based interface to the page table entries
 pub trait PTEntryWrite {
     /// overwrite the flags with the ones provided
@@ -26,7 +25,6 @@ pub trait PTEntryWrite {
     /// returns the address in 64 bits
     fn write_extended_flags(&mut self) -> ExtendedFlags;
 }
-
 
 /// unimplemented boilerplate for the top 10 bits in larger page table entries
 #[derive(Clone, Copy)]
@@ -72,8 +70,7 @@ impl EntryFlags {
     }
     #[inline]
     pub const fn is_user(&self) -> bool {
-        self.
-        inner & (1 << 4) != 0
+        self.inner & (1 << 4) != 0
     }
     #[inline]
     pub const fn is_global(&self) -> bool {
@@ -93,10 +90,10 @@ impl EntryFlags {
     }
     #[inline]
     pub const fn is_branch(&self) -> bool {
-        self.is_valid() && !self.is_readable() && !self.is_writable() && ! self.is_executable()
+        self.is_valid() && !self.is_readable() && !self.is_writable() && !self.is_executable()
     }
 
-#[inline]
+    #[inline]
     pub const fn set_valid(&mut self, flag: bool) {
         let flag = if flag { 1 } else { 0 };
         self.inner |= flag << 0;
@@ -204,5 +201,4 @@ impl EntryFlags {
     pub const READ_WRITE: EntryFlags = EntryFlags::READ.with_writable(true);
     pub const USER_READ_WRITE: EntryFlags = EntryFlags::READ_WRITE.with_user(true);
     pub const READ_EXECUTE: EntryFlags = EntryFlags::READ.with_executable(true);
-
 }

@@ -31,11 +31,8 @@ const PPN_SEGMENTS: [BitGroup; LEVELS] = [(9, 10), (9, 19), (9, 28), (17, 37)];
 /// of the lowest bit in the group.
 const PA_SEGMENTS: [BitGroup; LEVELS] = [(9, 12), (9, 21), (9, 30), (17, 39)];
 
-
 /// Sv48 Page Table Entry
 #[repr(transparent)]
 pub struct Entry(u64);
 
-impl Entry {
-    
-}
+impl Entry {}

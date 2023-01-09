@@ -1,13 +1,15 @@
-use crate::mmu::{entry::{PTEntryRead, ExtendedFlags, PTEntryWrite}, page_table::descriptor::PageTableDescriptor, EntryFlags};
-
+use crate::mmu::{
+    entry::{ExtendedFlags, PTEntryRead, PTEntryWrite},
+    page_table::descriptor::PageTableDescriptor,
+    EntryFlags,
+};
 
 #[repr(transparent)]
 pub struct PageTableEntryUntyped(usize);
 
-
 impl PTEntryRead for (&PageTableEntryUntyped, &PageTableDescriptor) {
     fn extract_flags(&self) -> EntryFlags {
-        EntryFlags::from_u16((self.0.0 & (1 << 10) -1) as u16)
+        EntryFlags::from_u16((self.0 .0 & (1 << 10) - 1) as u16)
     }
 
     fn address_limited(&self) -> Option<u32> {
@@ -19,22 +21,20 @@ impl PTEntryRead for (&PageTableEntryUntyped, &PageTableDescriptor) {
         for level in 0..self.1.levels {
             let (bit_width, offset) = self.1.page_segments[level];
             let mask = ((1 << bit_width) - 1) << offset;
-            address = (self.0.0 as u64 & mask) >> offset;
+            address = (self.0 .0 as u64 & mask) >> offset;
         }
         address << 12
     }
-
 
     fn extract_extended_flags(&self) -> ExtendedFlags {
         todo!()
     }
 
-
     fn extract_segment_limited(&self, level: usize) -> u32 {
         todo!()
     }
     /// given the page table level (depth), extract the bits corresponding to this level in this entry,
-    /// and return them according to the bit positions of the virtual address 
+    /// and return them according to the bit positions of the virtual address
     fn extract_segment(&self, level: usize) -> u64 {
         todo!()
     }
@@ -42,7 +42,7 @@ impl PTEntryRead for (&PageTableEntryUntyped, &PageTableDescriptor) {
 
 impl PTEntryRead for (&mut PageTableEntryUntyped, &PageTableDescriptor) {
     fn extract_flags(&self) -> EntryFlags {
-        EntryFlags::from_u16((self.0.0 & (1 << 10) -1) as u16)
+        EntryFlags::from_u16((self.0 .0 & (1 << 10) - 1) as u16)
     }
 
     fn address_limited(&self) -> Option<u32> {
@@ -54,22 +54,20 @@ impl PTEntryRead for (&mut PageTableEntryUntyped, &PageTableDescriptor) {
         for level in 0..self.1.levels {
             let (bit_width, offset) = self.1.page_segments[level];
             let mask = ((1 << bit_width) - 1) << offset;
-            address = (self.0.0 as u64 & mask) >> offset;
+            address = (self.0 .0 as u64 & mask) >> offset;
         }
         address << 12
     }
-
 
     fn extract_extended_flags(&self) -> ExtendedFlags {
         todo!()
     }
 
-
     fn extract_segment_limited(&self, level: usize) -> u32 {
         todo!()
     }
     /// given the page table level (depth), extract the bits corresponding to this level in this entry,
-    /// and return them according to the bit positions of the virtual address 
+    /// and return them according to the bit positions of the virtual address
     fn extract_segment(&self, level: usize) -> u64 {
         todo!()
     }
@@ -77,7 +75,7 @@ impl PTEntryRead for (&mut PageTableEntryUntyped, &PageTableDescriptor) {
 
 impl PTEntryWrite for (&mut PageTableEntryUntyped, &PageTableDescriptor) {
     fn write_flags(&mut self, flags: EntryFlags) {
-        self.0.0 |= flags.as_u16() as usize;
+        self.0 .0 |= flags.as_u16() as usize;
     }
     fn invalidate(&mut self) {
         todo!()
@@ -90,7 +88,7 @@ impl PTEntryWrite for (&mut PageTableEntryUntyped, &PageTableDescriptor) {
             let mask = ((1 << bit_width) - 1) << offset;
             bits = (address << offset) & mask;
         }
-        self.0.0 |= bits as usize;
+        self.0 .0 |= bits as usize;
     }
 
     fn write_extended_flags(&mut self) -> ExtendedFlags {
@@ -102,7 +100,7 @@ impl PageTableEntryUntyped {
     #[inline]
     pub const fn copy_flags(&self) -> EntryFlags {
         // write lower 10 bits of entry into EntryFlags
-        EntryFlags::from_u16((self.0 & (1 << 10) -1) as u16)
+        EntryFlags::from_u16((self.0 & (1 << 10) - 1) as u16)
     }
     /// clear lowest bit
     pub const fn invalidate(&mut self) {

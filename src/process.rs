@@ -1,6 +1,6 @@
 use crate::mem::page::alloc;
 use crate::mmu::page_table::untyped::PageTableUntyped;
-use crate::mmu::{EntryFlags};
+use crate::mmu::EntryFlags;
 use crate::{
     mem::{page::zalloc, PAGE_SIZE},
     trap::TrapFrame,
@@ -47,14 +47,12 @@ impl Process {
         let page_table = zalloc(1)? as *mut PageTableUntyped;
         unsafe {
             let table = page_table.as_mut().unwrap();
-            table.map(0,0,0,EntryFlags::USER_READ_WRITE);
+            table.map(0, 0, 0, EntryFlags::USER_READ_WRITE);
         }
-
 
         let mut trap_frame = TrapFrame::zero();
         trap_frame.regs[2] = stack_pointer as usize;
-        
-        
+
         let page_table = page_table as *mut u8;
         let process = Process {
             id,

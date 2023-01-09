@@ -1,8 +1,8 @@
 pub mod descriptor;
-pub mod untyped;
 pub mod forty_eight;
 pub mod thirty_nine;
 pub mod thirty_two;
+pub mod untyped;
 
 pub enum PageTableEntryKind<T> {
     Branch(T),

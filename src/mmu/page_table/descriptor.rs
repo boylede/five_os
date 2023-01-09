@@ -1,5 +1,3 @@
-
-
 pub struct PageTableDescriptor {
     /// the size of the page table, in bytes (always 4096)
     pub size: usize,
@@ -20,7 +18,7 @@ impl PageTableDescriptor {
         collapse(self.virtual_segments).0 + 12
     }
     pub fn physical_address_size(&self) -> usize {
-       collapse(self.physical_segments).0 + 12
+        collapse(self.physical_segments).0 + 12
     }
 }
 
@@ -32,4 +30,3 @@ fn collapse(segments: &[BitGroup]) -> BitGroup {
     let size = segments.iter().map(|(bits, _)| *bits).sum();
     (size, segments[0].1)
 }
-
