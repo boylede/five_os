@@ -7,7 +7,7 @@ use core::arch::asm;
 use five_os::{
     cpu::plic::PLIC,
     mem::{page::zalloc, PAGE_SIZE},
-    mmu::print_map,
+    mmu::{print_map, page_table::untyped::PageTableUntyped},
     trap::TrapFrame,
     *,
 };
@@ -34,7 +34,7 @@ extern "C" fn kinit() {
     println!("---------- Kernel Space Identity Map ----------");
     {
         // map kernel page table
-        let kpt = kernel_page_table as *const mmu::PageTableUntyped as usize;
+        let kpt = kernel_page_table as *const PageTableUntyped as usize;
         println!("Kernel root page table: {:x}", kpt);
         mmu::identity_map_range(kernel_page_table, kpt, kpt, EntryFlags::READ_WRITE);
     }

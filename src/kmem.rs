@@ -1,6 +1,7 @@
 use crate::mem::page::{align_power, zalloc};
 use crate::mem::PAGE_SIZE;
-use crate::mmu::{Page, PageTableUntyped};
+use crate::mmu::{Page};
+use crate::mmu::page_table::untyped::PageTableUntyped;
 
 /// Allocates memory for the kernel.
 use core::{mem::size_of, ptr::null_mut};
