@@ -7,7 +7,7 @@ use core::arch::asm;
 use five_os::{
     cpu::plic::PLIC,
     mem::{page::zalloc, PAGE_SIZE},
-    mmu::{print_map, page_table::untyped::PageTableUntyped},
+    mmu::page_table::untyped::PageTableUntyped,
     trap::TrapFrame,
     *,
 };
@@ -36,7 +36,7 @@ extern "C" fn kinit() {
         // map kernel page table
         let kpt = kernel_page_table as *const PageTableUntyped as usize;
         println!("Kernel root page table: {:x}", kpt);
-        mmu::identity_map_range(kernel_page_table, kpt, kpt, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(kpt, kpt, EntryFlags::READ_WRITE);
     }
     {
         // map kernel's dynamic memory
@@ -44,7 +44,7 @@ extern "C" fn kinit() {
         let page_count = kmem::allocation_count();
         let end = kernel_heap + page_count * PAGE_SIZE;
         println!("Dynamic Memory: {:x} -> {:x}  RW", kernel_heap, end);
-        mmu::identity_map_range(kernel_page_table, kernel_heap, end, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(kernel_heap, end, EntryFlags::READ_WRITE);
     }
     {
         // map allocation 'bitmap'
@@ -54,8 +54,7 @@ extern "C" fn kinit() {
             layout.heap_start,
             layout.heap_start + page_count
         );
-        mmu::identity_map_range(
-            kernel_page_table,
+        kernel_page_table.identity_map(
             layout.heap_start,
             layout.heap_start + page_count,
             EntryFlags::READ_EXECUTE,
@@ -67,8 +66,7 @@ extern "C" fn kinit() {
             "Kernel code section: {:x} -> {:x}  RE",
             layout.text_start, layout.text_end
         );
-        mmu::identity_map_range(
-            kernel_page_table,
+        kernel_page_table.identity_map(
             layout.text_start,
             layout.text_end,
             EntryFlags::READ_EXECUTE,
@@ -80,8 +78,7 @@ extern "C" fn kinit() {
             "Readonly data section: {:x} -> {:x}  RE",
             layout.rodata_start, layout.rodata_end
         );
-        mmu::identity_map_range(
-            kernel_page_table,
+        kernel_page_table.identity_map(
             layout.rodata_start,
             layout.rodata_end,
             // probably overlaps with text, so keep execute bit on
@@ -94,12 +91,7 @@ extern "C" fn kinit() {
             "Data section: {:x} -> {:x}  RW",
             layout.data_start, layout.data_end
         );
-        mmu::identity_map_range(
-            kernel_page_table,
-            layout.data_start,
-            layout.data_end,
-            EntryFlags::READ_WRITE,
-        );
+        kernel_page_table.identity_map(layout.data_start, layout.data_end, EntryFlags::READ_WRITE);
     }
     {
         // map bss
@@ -107,12 +99,7 @@ extern "C" fn kinit() {
             "BSS section: {:x} -> {:x}  RW",
             layout.bss_start, layout.bss_end
         );
-        mmu::identity_map_range(
-            kernel_page_table,
-            layout.bss_start,
-            layout.bss_end,
-            EntryFlags::READ_WRITE,
-        );
+        kernel_page_table.identity_map(layout.bss_start, layout.bss_end, EntryFlags::READ_WRITE);
     }
     {
         // map kernel stack
@@ -120,8 +107,7 @@ extern "C" fn kinit() {
             "Kernel stack: {:x} -> {:x}  RW",
             layout.stack_start, layout.stack_end
         );
-        mmu::identity_map_range(
-            kernel_page_table,
+        kernel_page_table.identity_map(
             layout.stack_start,
             layout.stack_end,
             EntryFlags::READ_WRITE,
@@ -135,12 +121,7 @@ extern "C" fn kinit() {
             "Hardware UART: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
-        mmu::identity_map_range(
-            kernel_page_table,
-            mm_hardware_start,
-            mm_hardware_end,
-            EntryFlags::READ_WRITE,
-        );
+        kernel_page_table.identity_map(mm_hardware_start, mm_hardware_end, EntryFlags::READ_WRITE);
     }
     {
         // map CLINT, MSIP
@@ -150,12 +131,7 @@ extern "C" fn kinit() {
             "Hardware CLINT, MSIP: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
-        mmu::identity_map_range(
-            kernel_page_table,
-            mm_hardware_start,
-            mm_hardware_end,
-            EntryFlags::READ_WRITE,
-        );
+        kernel_page_table.identity_map(mm_hardware_start, mm_hardware_end, EntryFlags::READ_WRITE);
     }
     {
         // map PLIC
@@ -165,12 +141,7 @@ extern "C" fn kinit() {
             "Hardware PLIC: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
-        mmu::identity_map_range(
-            kernel_page_table,
-            mm_hardware_start,
-            mm_hardware_end,
-            EntryFlags::READ_WRITE,
-        );
+        kernel_page_table.identity_map(mm_hardware_start, mm_hardware_end, EntryFlags::READ_WRITE);
     }
     {
         // map ???
@@ -180,12 +151,7 @@ extern "C" fn kinit() {
             "Hardware ???: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
-        mmu::identity_map_range(
-            kernel_page_table,
-            mm_hardware_start,
-            mm_hardware_end,
-            EntryFlags::READ_WRITE,
-        );
+        kernel_page_table.identity_map(mm_hardware_start, mm_hardware_end, EntryFlags::READ_WRITE);
     }
 
     // set up mmu satp value; todo: do this elsewhere / via zst interface
@@ -207,12 +173,7 @@ extern "C" fn kinit() {
             trap_stack,
             trap_stack + PAGE_SIZE
         );
-        mmu::identity_map_range(
-            kernel_page_table,
-            trap_stack,
-            trap_stack + PAGE_SIZE,
-            EntryFlags::READ_WRITE,
-        );
+        kernel_page_table.identity_map(trap_stack, trap_stack + PAGE_SIZE, EntryFlags::READ_WRITE);
 
         let global_trapframe_address = unsafe {
             // Safety: we are accessing a static mut. we are safe in kinit
@@ -227,8 +188,7 @@ extern "C" fn kinit() {
             global_trapframe_address
         };
 
-        mmu::identity_map_range(
-            kernel_page_table,
+        kernel_page_table.identity_map(
             global_trapframe_address,
             global_trapframe_address + PAGE_SIZE,
             EntryFlags::READ_WRITE,
