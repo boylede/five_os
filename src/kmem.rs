@@ -1,7 +1,9 @@
-use crate::mem::page::{align_power, zalloc};
-use crate::mem::PAGE_SIZE;
+use crate::memory::PAGE_SIZE;
+use crate::memory::allocator::page::{zalloc, align_power};
 use crate::mmu::page_table::untyped::PageTableUntyped;
 use crate::mmu::Page;
+
+use crate::{print, println};
 
 /// Allocates memory for the kernel.
 use core::{mem::size_of, ptr::null_mut};
@@ -106,7 +108,7 @@ pub fn setup() {
     }
 }
 
-pub fn kzmalloc(size: usize) -> *mut usize {
+pub fn kzmalloc(size: usize) -> *mut u8 {
     let size = align_power(size, 3);
     let address = kmalloc(size);
     if !address.is_null() {
@@ -119,7 +121,7 @@ pub fn kzmalloc(size: usize) -> *mut usize {
     address
 }
 
-pub fn kmalloc(size: usize) -> *mut usize {
+pub fn kmalloc(size: usize) -> *mut u8 {
     // scale the size to 8-byte boundaries (lowest three bits zero)
     // and add space required to store metadata
     let size = align_power(size, 3) + size_of::<AllocList>();
@@ -165,7 +167,7 @@ pub fn kmalloc(size: usize) -> *mut usize {
                 current_allocation.set_size(chunk_size);
             }
             // offset pointer by size of the metadata and coerce to general pointer
-            return unsafe { head.add(1) } as *mut usize;
+            return unsafe { head.add(1) } as *mut u8;
         } else {
             // go to next chunk
             head = (head as usize + current_allocation.get_size()) as *mut AllocList;
@@ -176,7 +178,8 @@ pub fn kmalloc(size: usize) -> *mut usize {
     null_mut()
 }
 
-pub fn kfree(address: *mut usize) {
+////// todo: rewrite
+pub fn kfree(address: *mut u8) {
     let mut head = unsafe {
         // SAFETY: access to static global,
         // we must ensure no one has mutable access to head
@@ -192,6 +195,7 @@ pub fn kfree(address: *mut usize) {
         head.as_mut().unwrap()
     };
     while head < tail {
+        println!("checking {:x}", current_allocation as *mut _ as usize);
         if current_allocation.is_taken() {
             let current_end = current_allocation.get_size() + head as usize;
             if current_end > address as usize {
@@ -200,6 +204,9 @@ pub fn kfree(address: *mut usize) {
                 head = (head as usize + current_allocation.get_size()) as *mut AllocList;
                 current_allocation = unsafe { head.as_mut() }.unwrap();
             }
+        } else {
+            head = (head as usize + current_allocation.get_size()) as *mut AllocList;
+            current_allocation = unsafe { head.as_mut() }.unwrap();
         }
     }
     coalesce()

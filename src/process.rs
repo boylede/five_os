@@ -1,8 +1,8 @@
-use crate::mem::page::alloc;
+use crate::memory::allocator::page::{alloc, zalloc};
 use crate::mmu::page_table::untyped::PageTableUntyped;
 use crate::mmu::EntryFlags;
 use crate::{
-    mem::{page::zalloc, PAGE_SIZE},
+    memory::{ PAGE_SIZE},
     trap::TrapFrame,
 };
 

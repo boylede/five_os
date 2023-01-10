@@ -14,7 +14,7 @@ extern "C" {
 }
 
 use crate::layout::StaticLayout;
-use crate::mem::page::align_address_to_page;
+use crate::memory::allocator::page::align_address_to_page;
 use crate::{print, print_title, printhdr, println};
 
 #[derive(Debug)]

@@ -1,9 +1,8 @@
 use core::cmp::Ordering;
 
 use crate::{
-    mem::{
-        page::{align_power, zalloc},
-        PAGE_ADDR_MASK, PAGE_SIZE,
+    memory::{
+        PAGE_ADDR_MASK, PAGE_SIZE, allocator::page::{align_power, zalloc},
     },
     mmu::{
         entry::{PTEntryRead, PTEntryWrite},

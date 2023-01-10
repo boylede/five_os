@@ -13,7 +13,7 @@ pub mod cpu_status;
 pub mod kmem;
 pub mod layout;
 pub mod logo;
-pub mod mem;
+pub mod memory;
 pub mod mmu;
 pub mod process;
 pub mod trap;

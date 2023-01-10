@@ -2,7 +2,7 @@ use self::page_table::descriptor::PageTableDescriptor;
 use self::page_table::untyped::PageTableUntyped;
 use crate::cpu_status::Satp;
 use crate::kmem;
-use crate::mem::PAGE_SIZE;
+use crate::memory::PAGE_SIZE;
 use page_table::forty_eight::SV_FORTY_EIGHT;
 use page_table::thirty_nine::SV_THIRTY_NINE;
 use page_table::thirty_two::SV_THIRTY_TWO;

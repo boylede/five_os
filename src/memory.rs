@@ -2,8 +2,11 @@ extern crate alloc;
 
 use core::alloc::{GlobalAlloc, Layout};
 
-pub mod bitmap;
-pub mod page;
+use crate::kmem::{kzmalloc, kfree};
+
+use crate::{print, println};
+
+pub mod allocator;
 
 /// pointer to the first allocatable-page, i.e. the first
 /// free page-aligned address in memory located after the
@@ -23,11 +26,12 @@ struct BumpPointerAlloc {
 }
 
 unsafe impl GlobalAlloc for BumpPointerAlloc {
-    unsafe fn alloc(&self, _layout: Layout) -> *mut u8 {
-        unimplemented!()
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        kzmalloc(layout.size())
     }
-    unsafe fn dealloc(&self, _: *mut u8, _: Layout) {
-        unimplemented!()
+    unsafe fn dealloc(&self, ptr: *mut u8, _: Layout) {
+        println!("dropping {:x}", ptr as usize);
+        kfree(ptr);
     }
 }
 

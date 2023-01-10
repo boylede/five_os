@@ -1,8 +1,8 @@
 use core::mem::size_of;
 
 use crate::layout::StaticLayout;
-use crate::mem::page::{align_address_to_page, alloc_table_entry_to_page_address};
-use crate::mem::{ALLOC_START, PAGE_SIZE};
+use crate::memory::allocator::page::{align_address_to_page, alloc_table_entry_to_page_address};
+use crate::memory::{ALLOC_START, PAGE_SIZE};
 use crate::{print, print_title, printhdr, println};
 
 #[repr(transparent)]

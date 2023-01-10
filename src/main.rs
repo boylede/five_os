@@ -1,12 +1,13 @@
 #![no_std]
 #![no_main]
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
-
+extern crate alloc;
 use core::arch::asm;
 
+use alloc::{boxed::Box, vec, string::String};
 use five_os::{
     cpu::plic::PLIC,
-    mem::{page::zalloc, PAGE_SIZE},
+    memory::{PAGE_SIZE, allocator::page::zalloc},
     mmu::page_table::untyped::PageTableUntyped,
     trap::TrapFrame,
     *,
@@ -24,7 +25,7 @@ extern "C" fn kinit() {
     layout::layout_sanity_check();
 
     let layout = StaticLayout::get();
-    mem::bitmap::setup();
+    memory::allocator::page::bitmap::setup();
     kmem::setup();
     mmu::setup();
     let kernel_page_table = kmem::get_page_table();
@@ -194,7 +195,7 @@ extern "C" fn kinit() {
         );
     }
 
-    mem::bitmap::print_mem_bitmap();
+    memory::allocator::page::bitmap::print_mem_bitmap();
 
     // print_map(kernel_page_table);
 
@@ -212,6 +213,21 @@ extern "C" fn kmain() {
     PLIC.set_threshold(0);
     PLIC.enable_interrupt(10);
     PLIC.set_priority(10, 1);
+
+    
+    {
+        printhdr!("testing allocations ");
+		let k = Box::<u32>::new(100);
+		println!("Boxed value = {}", &k);
+        println!("Boxed address = {:x}", Box::leak(k) as *const _ as usize);
+		let sparkle_heart = vec![240, 159, 146, 150];
+		let sparkle_heart = String::from_utf8(sparkle_heart).unwrap();
+		println!("String = {}", sparkle_heart);
+		kmem::print_table();
+        println!("test");
+	}
+    println!("test 2");
+	kmem::print_table();
 
     printhdr!("reached end, looping");
     loop {}

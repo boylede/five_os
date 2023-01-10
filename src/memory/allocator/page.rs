@@ -1,11 +1,12 @@
 use crate::layout::StaticLayout;
-use crate::mem::bitmap::{page_table, PageMarker};
-use crate::mem::{ALLOC_START, PAGE_SIZE};
+
+use crate::memory::{ALLOC_START, PAGE_SIZE, PAGE_ADDR_MAGNITIDE};
 use crate::mmu::Page;
 use crate::{print, println};
-use core::mem::size_of;
 
-use super::PAGE_ADDR_MAGNITIDE;
+
+pub mod bitmap;
+use bitmap::{page_table, PageMarker};
 
 /// Produces a page-aligned address by adding one
 /// less than the page size (4095), then masking low bits
