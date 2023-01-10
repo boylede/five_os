@@ -1,9 +1,9 @@
 use core::ptr::null_mut;
+use fiveos_riscv::cpu::uart::Uart;
+use fiveos_virtio::plic::PLIC;
 
-use crate::cpu::plic::PLIC;
-use crate::cpu::uart::Uart;
 use crate::layout::StaticLayout;
-use crate::{abort, print, println};
+use crate::{print, println};
 
 /// Context information collected in trap.s before calling rust trap handler
 #[repr(C)]

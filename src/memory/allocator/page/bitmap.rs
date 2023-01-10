@@ -1,8 +1,9 @@
 use core::mem::size_of;
 
+use fiveos_riscv::mmu::page_table::PAGE_SIZE;
+
 use crate::layout::StaticLayout;
-use crate::memory::allocator::page::{align_address_to_page, alloc_table_entry_to_page_address};
-use crate::memory::{ALLOC_START, PAGE_SIZE};
+use crate::memory::allocator::page::{alloc_table_entry_to_page_address, ALLOC_START};
 use crate::{print, print_title, printhdr, println};
 
 #[repr(transparent)]
@@ -61,33 +62,6 @@ impl Pageflags {
         mask <<= 2;
         self.0 = (self.0 & 0b11) | mask;
     }
-}
-
-/// Setup the kernel's page table to keep track of allocations.
-pub fn setup() {
-    print_title!("Setup Memory Allocation");
-    let layout = StaticLayout::get();
-    let (page_table, total_page_count) = page_table();
-    println!("{} pages x {}-bytes", total_page_count, PAGE_SIZE);
-    for page in page_table.iter_mut() {
-        page.clear();
-    }
-
-    let end_of_allocation_table = layout.heap_start + total_page_count * size_of::<PageMarker>();
-    println!(
-        "Allocation Table: {:x} - {:x}",
-        layout.heap_start, end_of_allocation_table
-    );
-
-    let alloc_start = unsafe {
-        ALLOC_START = align_address_to_page(end_of_allocation_table);
-        ALLOC_START
-    };
-    println!(
-        "Usable Pages: {:x} - {:x}",
-        alloc_start,
-        alloc_start + total_page_count * PAGE_SIZE
-    );
 }
 
 pub fn page_table() -> (&'static mut [PageMarker], usize) {

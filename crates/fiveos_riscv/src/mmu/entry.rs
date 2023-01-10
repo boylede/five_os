@@ -1,7 +1,3 @@
-use super::PageTableDescriptor;
-use super::PageTableUntyped;
-use super::TableTypes;
-
 /// testing out a trait-based interface to the page table entries
 pub trait PTEntryRead {
     /// copy the flags out of the entry for inspection

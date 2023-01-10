@@ -4,7 +4,8 @@ mod commands;
 macro_rules! print {
     ($($args:tt)+) => ({
         use core::fmt::Write;
-        let _ = write!($crate::cpu::uart::Uart::default(), $($args)+);
+        use fiveos_riscv::cpu;
+        let _ = write!(cpu::uart::Uart::default(), $($args)+);
     });
 }
 

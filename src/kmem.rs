@@ -1,9 +1,10 @@
-use crate::memory::PAGE_SIZE;
-use crate::memory::allocator::page::{zalloc, align_power};
-use crate::mmu::page_table::untyped::PageTableUntyped;
-use crate::mmu::Page;
+use fiveos_riscv::mmu::{
+    align_power,
+    page_table::{untyped::PageTableUntyped, PAGE_SIZE},
+    Page,
+};
 
-use crate::{print, println};
+use crate::{memory::allocator::page::zalloc, print, println};
 
 /// Allocates memory for the kernel.
 use core::{mem::size_of, ptr::null_mut};
@@ -212,11 +213,62 @@ pub fn kfree(address: *mut u8) {
     coalesce()
 }
 
+////// todo: rewrite
 pub fn coalesce() {
-    unimplemented!()
+    unsafe {
+        let mut head = KMEM_HEAD;
+        let tail = (KMEM_HEAD as *mut u8).add(KMEM_ALLOC * PAGE_SIZE) as *mut AllocList;
+
+        while head < tail {
+            let next = (head as *mut u8).add((*head).get_size()) as *mut AllocList;
+            if (*head).get_size() == 0 {
+                // If this happens, then we have a bad heap
+                // (double free or something). However, that
+                // will cause an infinite loop since the next
+                // pointer will never move beyond the current
+                // location.
+                break;
+            } else if next >= tail {
+                // We calculated the next by using the size
+                // given as get_size(), however this could push
+                // us past the tail. In that case, the size is
+                // wrong, hence we break and stop doing what we
+                // need to do.
+                break;
+            } else if (*head).is_free() && (*next).is_free() {
+                // This means we have adjacent blocks needing to
+                // be freed. So, we combine them into one
+                // allocation.
+                (*head).set_size((*head).get_size() + (*next).get_size());
+            }
+            // If we get here, we might've moved. Recalculate new
+            // head.
+            head = (head as *mut u8).add((*head).get_size()) as *mut AllocList;
+        }
+    }
 }
 
 /// prints the allocation table
 pub fn print_table() {
-    unimplemented!()
+    unsafe {
+        let mut head = KMEM_HEAD as *mut AllocList;
+        let tail = (head).add(KMEM_ALLOC) as *mut AllocList;
+
+        while head < tail {
+            {
+                println!("inspecting {:x}", head as *mut u8 as usize);
+                let this = head.as_ref().unwrap();
+                println!(
+                    "{:p}: Length = {:<10} Taken = {}",
+                    this,
+                    this.get_size(),
+                    this.is_taken()
+                );
+            }
+            let next = (head as *mut u8).add((*head).get_size());
+            println!("checking next: {:x}", next as usize);
+            head = next as *mut AllocList;
+        }
+    }
+    println!("done printing alloc table");
 }

@@ -1,23 +1,14 @@
 use core::cmp::Ordering;
 
-use crate::{
-    memory::{
-        PAGE_ADDR_MASK, PAGE_SIZE, allocator::page::{align_power, zalloc},
-    },
-    mmu::{
-        entry::{PTEntryRead, PTEntryWrite},
-        get_global_descriptor,
-        page_table::{
-            forty_eight::SV_FORTY_EIGHT, thirty_nine::SV_THIRTY_NINE, thirty_two::SV_THIRTY_TWO,
-        },
-        EntryFlags, Page, PageSize, TableTypes, PAGE_TABLE_TYPE,
-    },
-    print, println,
+use crate::mmu::{
+    align_power,
+    entry::{PTEntryRead, PTEntryWrite},
+    EntryFlags, Page, PageSize,
 };
 
 use self::entry::PageTableEntryUntyped;
 
-use super::descriptor::PageTableDescriptor;
+use super::{descriptor::PageTableDescriptor, PAGE_ADDR_MASK, PAGE_SIZE};
 
 pub mod entry;
 
@@ -39,8 +30,15 @@ impl PageTableUntyped {
         // unsafe { GenericPageTableEntry::at_address_mut(address) }
         unsafe { (address as *mut PageTableEntryUntyped).as_mut().unwrap() }
     }
-    pub fn map(&mut self, virt: usize, phys: usize, size: usize, flags: EntryFlags) {
-        let descriptor = unsafe { get_global_descriptor() };
+    pub fn map(
+        &mut self,
+        descriptor: &PageTableDescriptor,
+        virt: usize,
+        phys: usize,
+        size: usize,
+        flags: EntryFlags,
+        zalloc: fn(usize) -> Option<*mut [Page]>,
+    ) {
         let aligned_vstart = virt & !PAGE_ADDR_MASK;
         let aligned_pstart = phys & !PAGE_ADDR_MASK;
         let page_count =
@@ -56,86 +54,40 @@ impl PageTableUntyped {
                 flags,
                 PageSize::Page,
                 descriptor,
+                zalloc,
             );
             for page in newpages.iter() {
                 if *page != 0 {
-                    internal_map_range(self, *page, *page, EntryFlags::READ_WRITE, descriptor);
+                    internal_map_range(
+                        self,
+                        *page,
+                        *page,
+                        EntryFlags::READ_WRITE,
+                        descriptor,
+                        zalloc,
+                    );
                 }
             }
         }
         todo!()
     }
-    pub fn identity_map(&mut self, start: usize, end: usize, flags: EntryFlags) {
+    pub fn identity_map(
+        &mut self,
+        descriptor: &PageTableDescriptor,
+        start: usize,
+        end: usize,
+        flags: EntryFlags,
+        zalloc: fn(usize) -> Option<*mut [Page]>,
+    ) {
         unsafe {
-            use TableTypes::*;
-            match PAGE_TABLE_TYPE {
-                None => (),
-                Sv32 => internal_map_range(self, start, end, flags, &SV_THIRTY_TWO),
-                Sv39 => internal_map_range(self, start, end, flags, &SV_THIRTY_NINE),
-                Sv48 => internal_map_range(self, start, end, flags, &SV_FORTY_EIGHT),
-            }
-        }
-    }
-    pub fn print(&self) {
-        unsafe {
-            use TableTypes::*;
-            match PAGE_TABLE_TYPE {
-                None => (),
-                Sv32 => inner_print_map(self, &SV_THIRTY_TWO, 0, 0),
-                Sv39 => inner_print_map(self, &SV_THIRTY_NINE, 0, 0),
-                Sv48 => inner_print_map(self, &SV_FORTY_EIGHT, 0, 0),
-            }
-        }
-    }
-}
-
-fn inner_print_map(
-    table: &PageTableUntyped,
-    descriptor: &PageTableDescriptor,
-    base_address: usize,
-    descent: usize,
-) {
-    let max_bits = descriptor.virtual_address_size();
-    let bits_known: usize = descriptor
-        .virtual_segments
-        .iter()
-        .take(descent + 1)
-        .map(|(bits, _)| *bits)
-        .sum();
-    let bits_unknown = max_bits - bits_known;
-    let page_size = 1 << bits_unknown;
-    println!(
-        "Reading pagetable located at 0x{:x}:",
-        table as *const PageTableUntyped as usize
-    );
-    // let page_size = 1 << (12+bits_known);
-    // println!("memory region described by each entry is: 0x{:x}-bytes", page_size);
-
-    for index in 0..descriptor.size / descriptor.entry_size {
-        let resulting_address = base_address + (index * page_size);
-        let entry = (table.entry(index, descriptor.entry_size), descriptor);
-        if entry.extract_flags().is_valid() {
-            println!(
-                "{}-{}: 0x{:x}-0x{:x}: {:?}",
-                descent,
-                index,
-                resulting_address,
-                resulting_address + page_size - 1,
-                entry.0
-            );
-            if entry.extract_flags().is_branch() {
-                // println!("branching");
-                let next = entry.address();
-                let next_table = unsafe { (next as *const PageTableUntyped).as_ref().unwrap() };
-
-                inner_print_map(next_table, descriptor, resulting_address, descent + 1);
-
-                // println!("rejoining");
-            } else {
-                // println!("{}-{}: 0x{:x}-0x{:x}: {:?}", descent, index, resulting_address,resulting_address+page_size-1, entry);
-            }
-        } else {
-            // println!("{}-{}: 0x{:x}-0x{:x}: not mapped.", descent, index, resulting_address, resulting_address+page_size-1);
+            // use TableTypes::*;
+            // match PAGE_TABLE_TYPE {
+            //     None => (),
+            //     Sv32 => internal_map_range(self, start, end, flags, &SV_THIRTY_TWO, zalloc),
+            //     Sv39 => internal_map_range(self, start, end, flags, &SV_THIRTY_NINE, zalloc),
+            //     Sv48 => internal_map_range(self, start, end, flags, &SV_FORTY_EIGHT, zalloc),
+            // }
+            internal_map_range(self, start, end, flags, descriptor, zalloc)
         }
     }
 }
@@ -146,6 +98,7 @@ fn internal_map_range(
     end: usize,
     flags: EntryFlags,
     descriptor: &PageTableDescriptor,
+    zalloc: fn(usize) -> Option<*mut [Page]>,
 ) {
     // println!("mapping {:x} to {:x} at page table located {:x}", start, end, ((root as *mut PageTable) as usize));
 
@@ -157,11 +110,26 @@ fn internal_map_range(
     for i in 0..page_count {
         let address = aligned + (i << 12);
         // println!("mapping page# {} at {:x}", i, address);
-        let newpages = map_root(root, address, address, flags, PageSize::Page, descriptor);
+        let newpages = map_root(
+            root,
+            address,
+            address,
+            flags,
+            PageSize::Page,
+            descriptor,
+            zalloc,
+        );
         for page in newpages.iter() {
             if *page != 0 {
                 // println!("  added a kernel page table: {:x}", *page);
-                internal_map_range(root, *page, *page, EntryFlags::READ_WRITE, descriptor);
+                internal_map_range(
+                    root,
+                    *page,
+                    *page,
+                    EntryFlags::READ_WRITE,
+                    descriptor,
+                    zalloc,
+                );
             }
         }
     }
@@ -174,6 +142,7 @@ fn map_root(
     flags: EntryFlags,
     page_size: PageSize,
     descriptor: &PageTableDescriptor,
+    zalloc: fn(usize) -> Option<*mut [Page]>,
 ) -> [usize; 4] {
     map(
         table,
@@ -183,6 +152,7 @@ fn map_root(
         page_size,
         descriptor.levels - 1,
         descriptor,
+        zalloc,
     )
 }
 
@@ -194,6 +164,7 @@ fn map(
     page_size: PageSize,
     level: usize,
     descriptor: &PageTableDescriptor,
+    zalloc: fn(usize) -> Option<*mut [Page]>,
 ) -> [usize; 4] {
     let mut newly_allocated_pages: [usize; 4] = [0; 4];
     // println!("mapping {:x} -> {:x} @ {}", virtual_address, physical_address, level);
@@ -255,6 +226,7 @@ fn map(
                     page_size,
                     level - 1,
                     descriptor,
+                    zalloc,
                 );
                 // println!("  lz/{}: {:x}", level, new_page as usize);
                 newly_allocated_pages[level] = new_page as *mut Page as usize;
@@ -275,6 +247,7 @@ fn map(
                     page_size,
                     level - 1,
                     descriptor,
+                    zalloc,
                 );
             }
         }

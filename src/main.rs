@@ -4,39 +4,54 @@
 extern crate alloc;
 use core::arch::asm;
 
-use alloc::{boxed::Box, vec, string::String};
+use alloc::{boxed::Box, string::String, vec};
 use five_os::{
-    cpu::plic::PLIC,
-    memory::{PAGE_SIZE, allocator::page::zalloc},
-    mmu::page_table::untyped::PageTableUntyped,
+    memory::{allocator::page::zalloc, get_global_descriptor},
     trap::TrapFrame,
     *,
 };
 
+use fiveos_riscv::{
+    cpu::{
+        self,
+        status::{
+            asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_misa, asm_get_mtvec,
+            asm_get_mvendorid, get_base_width, set_trap_vector, EXTENSION_DESCRIPTIONS,
+            EXTENSION_NAMES,
+        },
+    },
+    mmu::{
+        entry::PTEntryRead,
+        page_table::{descriptor::PageTableDescriptor, untyped::PageTableUntyped, PAGE_SIZE},
+        EntryFlags,
+    },
+};
+use fiveos_virtio::plic::PLIC;
 use layout::StaticLayout;
-use mmu::EntryFlags;
 
 /// Our first entry point out of the assembly boot.s
 #[no_mangle]
 extern "C" fn kinit() {
     cpu::uart::Uart::default().init();
     logo::print_logo();
-    cpu_status::print_cpu_info();
+    print_cpu_info();
     layout::layout_sanity_check();
 
     let layout = StaticLayout::get();
-    memory::allocator::page::bitmap::setup();
+    memory::allocator::page::setup();
     kmem::setup();
-    mmu::setup();
+    memory::setup();
     let kernel_page_table = kmem::get_page_table();
     //let page_table_erased = kernel_page_table as *const _ as usize;
 
     print_title!("Kernel Space Identity Map");
+    let descriptor = unsafe { get_global_descriptor() };
     {
         // map kernel page table
         let kpt = kernel_page_table as *const PageTableUntyped as usize;
         println!("Kernel root page table: {:x}", kpt);
-        kernel_page_table.identity_map(kpt, kpt, EntryFlags::READ_WRITE);
+
+        kernel_page_table.identity_map(descriptor, kpt, kpt, EntryFlags::READ_WRITE, zalloc);
     }
     {
         // map kernel's dynamic memory
@@ -44,7 +59,13 @@ extern "C" fn kinit() {
         let page_count = kmem::allocation_count();
         let end = kernel_heap + page_count * PAGE_SIZE;
         println!("Dynamic Memory: {:x} -> {:x}  RW", kernel_heap, end);
-        kernel_page_table.identity_map(kernel_heap, end, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(
+            descriptor,
+            kernel_heap,
+            end,
+            EntryFlags::READ_WRITE,
+            zalloc,
+        );
     }
     {
         // map allocation 'bitmap'
@@ -55,9 +76,11 @@ extern "C" fn kinit() {
             layout.heap_start + page_count
         );
         kernel_page_table.identity_map(
+            descriptor,
             layout.heap_start,
             layout.heap_start + page_count,
             EntryFlags::READ_EXECUTE,
+            zalloc,
         );
     }
     {
@@ -67,9 +90,11 @@ extern "C" fn kinit() {
             layout.text_start, layout.text_end
         );
         kernel_page_table.identity_map(
+            descriptor,
             layout.text_start,
             layout.text_end,
             EntryFlags::READ_EXECUTE,
+            zalloc,
         );
     }
     {
@@ -79,10 +104,12 @@ extern "C" fn kinit() {
             layout.rodata_start, layout.rodata_end
         );
         kernel_page_table.identity_map(
+            descriptor,
             layout.rodata_start,
             layout.rodata_end,
             // probably overlaps with text, so keep execute bit on
             EntryFlags::READ_EXECUTE,
+            zalloc,
         );
     }
     {
@@ -91,7 +118,13 @@ extern "C" fn kinit() {
             "Data section: {:x} -> {:x}  RW",
             layout.data_start, layout.data_end
         );
-        kernel_page_table.identity_map(layout.data_start, layout.data_end, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(
+            descriptor,
+            layout.data_start,
+            layout.data_end,
+            EntryFlags::READ_WRITE,
+            zalloc,
+        );
     }
     {
         // map bss
@@ -99,7 +132,13 @@ extern "C" fn kinit() {
             "BSS section: {:x} -> {:x}  RW",
             layout.bss_start, layout.bss_end
         );
-        kernel_page_table.identity_map(layout.bss_start, layout.bss_end, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(
+            descriptor,
+            layout.bss_start,
+            layout.bss_end,
+            EntryFlags::READ_WRITE,
+            zalloc,
+        );
     }
     {
         // map kernel stack
@@ -108,9 +147,11 @@ extern "C" fn kinit() {
             layout.stack_start, layout.stack_end
         );
         kernel_page_table.identity_map(
+            descriptor,
             layout.stack_start,
             layout.stack_end,
             EntryFlags::READ_WRITE,
+            zalloc,
         );
     }
     {
@@ -121,7 +162,13 @@ extern "C" fn kinit() {
             "Hardware UART: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
-        kernel_page_table.identity_map(mm_hardware_start, mm_hardware_end, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(
+            descriptor,
+            mm_hardware_start,
+            mm_hardware_end,
+            EntryFlags::READ_WRITE,
+            zalloc,
+        );
     }
     {
         // map CLINT, MSIP
@@ -131,7 +178,13 @@ extern "C" fn kinit() {
             "Hardware CLINT, MSIP: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
-        kernel_page_table.identity_map(mm_hardware_start, mm_hardware_end, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(
+            descriptor,
+            mm_hardware_start,
+            mm_hardware_end,
+            EntryFlags::READ_WRITE,
+            zalloc,
+        );
     }
     {
         // map PLIC
@@ -141,7 +194,13 @@ extern "C" fn kinit() {
             "Hardware PLIC: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
-        kernel_page_table.identity_map(mm_hardware_start, mm_hardware_end, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(
+            descriptor,
+            mm_hardware_start,
+            mm_hardware_end,
+            EntryFlags::READ_WRITE,
+            zalloc,
+        );
     }
     {
         // map ???
@@ -151,7 +210,13 @@ extern "C" fn kinit() {
             "Hardware ???: {:x} -> {:x}  RW",
             mm_hardware_start, mm_hardware_end
         );
-        kernel_page_table.identity_map(mm_hardware_start, mm_hardware_end, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(
+            descriptor,
+            mm_hardware_start,
+            mm_hardware_end,
+            EntryFlags::READ_WRITE,
+            zalloc,
+        );
     }
 
     // set up mmu satp value; todo: do this elsewhere / via zst interface
@@ -173,7 +238,13 @@ extern "C" fn kinit() {
             trap_stack,
             trap_stack + PAGE_SIZE
         );
-        kernel_page_table.identity_map(trap_stack, trap_stack + PAGE_SIZE, EntryFlags::READ_WRITE);
+        kernel_page_table.identity_map(
+            descriptor,
+            trap_stack,
+            trap_stack + PAGE_SIZE,
+            EntryFlags::READ_WRITE,
+            zalloc,
+        );
 
         let global_trapframe_address = unsafe {
             // Safety: we are accessing a static mut. we are safe in kinit
@@ -189,9 +260,11 @@ extern "C" fn kinit() {
         };
 
         kernel_page_table.identity_map(
+            descriptor,
             global_trapframe_address,
             global_trapframe_address + PAGE_SIZE,
             EntryFlags::READ_WRITE,
+            zalloc,
         );
     }
 
@@ -214,20 +287,21 @@ extern "C" fn kmain() {
     PLIC.enable_interrupt(10);
     PLIC.set_priority(10, 1);
 
-    
     {
         printhdr!("testing allocations ");
-		let k = Box::<u32>::new(100);
-		println!("Boxed value = {}", &k);
+        let k = Box::<u32>::new(100);
+        println!("Boxed value = {}", &k);
         println!("Boxed address = {:x}", Box::leak(k) as *const _ as usize);
-		let sparkle_heart = vec![240, 159, 146, 150];
-		let sparkle_heart = String::from_utf8(sparkle_heart).unwrap();
-		println!("String = {}", sparkle_heart);
-		kmem::print_table();
+        let sparkle_heart = vec![240, 159, 146, 150];
+        let sparkle_heart = String::from_utf8(sparkle_heart).unwrap();
+        println!("String = {}", sparkle_heart);
+        println!("\n\nAllocations of a box, vector, and string");
+        kmem::print_table();
         println!("test");
-	}
+    }
     println!("test 2");
-	kmem::print_table();
+    println!("\n\nEverything should now be free:");
+    kmem::print_table();
 
     printhdr!("reached end, looping");
     loop {}
@@ -237,4 +311,153 @@ extern "C" fn kmain() {
 extern "C" fn kinit_hart() {
     println!("entering hart kinit");
     abort();
+}
+
+pub fn print_cpu_info() {
+    let vendor = unsafe { asm_get_mvendorid() };
+    let architecture = unsafe { asm_get_marchid() };
+    let implementation = unsafe { asm_get_mimpid() };
+    print_title!("CPU INFO");
+    println!(
+        "Vendor: {:x} | Architecture: {:x} | Implementation: {:x}",
+        vendor, architecture, implementation
+    );
+    print_misa_info();
+}
+////////////////////////////////////////////// todo: relocate
+pub fn print_trap_info() {
+    let mepc = unsafe { asm_get_mepc() };
+    println!("mepc: {:x}", mepc);
+    let mtvec = unsafe { asm_get_mtvec() };
+    println!("mtvec: {:x}", mtvec);
+}
+
+pub fn inspect_trap_vector() {
+    printhdr!("Trap");
+    let mtvec = unsafe { asm_get_mtvec() };
+    if mtvec == 0 {
+        println!("trap vector not initialized");
+        return;
+    }
+    println!("trap vector: {:x}", mtvec);
+    match mtvec & 0b11 {
+        0b00 => println!("Direct Mode"),
+        0b01 => println!("Vectored Mode"),
+        0b10 => println!("Reserved Value 2 Set"),
+        0b11 => println!("Reserved Value 3 Set"),
+        _ => unreachable!(),
+    };
+}
+
+pub fn print_page_table_untyped(table: &PageTableUntyped) {
+    let descriptor = unsafe { get_global_descriptor() };
+    inner_print_map(table, descriptor, 0, 0);
+}
+
+fn inner_print_map(
+    table: &PageTableUntyped,
+    descriptor: &PageTableDescriptor,
+    base_address: usize,
+    descent: usize,
+) {
+    let max_bits = descriptor.virtual_address_size();
+    let bits_known: usize = descriptor
+        .virtual_segments
+        .iter()
+        .take(descent + 1)
+        .map(|(bits, _)| *bits)
+        .sum();
+    let bits_unknown = max_bits - bits_known;
+    let page_size = 1 << bits_unknown;
+    println!(
+        "Reading pagetable located at 0x{:x}:",
+        table as *const PageTableUntyped as usize
+    );
+    // let page_size = 1 << (12+bits_known);
+    // println!("memory region described by each entry is: 0x{:x}-bytes", page_size);
+
+    for index in 0..descriptor.size / descriptor.entry_size {
+        let resulting_address = base_address + (index * page_size);
+        let entry = (table.entry(index, descriptor.entry_size), descriptor);
+        if entry.extract_flags().is_valid() {
+            println!(
+                "{}-{}: 0x{:x}-0x{:x}: {:?}",
+                descent,
+                index,
+                resulting_address,
+                resulting_address + page_size - 1,
+                entry.0
+            );
+            if entry.extract_flags().is_branch() {
+                // println!("branching");
+                let next = entry.address();
+                let next_table = unsafe { (next as *const PageTableUntyped).as_ref().unwrap() };
+
+                inner_print_map(next_table, descriptor, resulting_address, descent + 1);
+
+                // println!("rejoining");
+            } else {
+                // println!("{}-{}: 0x{:x}-0x{:x}: {:?}", descent, index, resulting_address,resulting_address+page_size-1, entry);
+            }
+        } else {
+            // println!("{}-{}: 0x{:x}-0x{:x}: not mapped.", descent, index, resulting_address, resulting_address+page_size-1);
+        }
+    }
+}
+
+pub fn print_misa_info() {
+    printhdr!("Machine Instruction Set Architecture");
+    let misa = unsafe { asm_get_misa() };
+    let xlen = {
+        let mut misa: i64 = misa as i64;
+        // if sign bit is 0, XLEN is 32
+        if misa > 0 {
+            32
+        } else {
+            // shift misa over 1 bit to check next-highest bit
+            misa <<= 1;
+            // if new sign bit is 0, XLEN is 64
+            if misa > 0 {
+                64
+            } else {
+                // both high bits are 1, so xlen is 128
+                128
+            }
+        }
+    };
+    let checked_width = get_base_width();
+    if xlen != checked_width {
+        println!(
+            "ERROR: MISA reports different base width than empirically found: {} vs {}",
+            xlen, checked_width
+        );
+    } else {
+        println!("Base ISA Width: {}", xlen);
+    }
+
+    let extensions = misa & 0x01FF_FFFF;
+    print!("Extensions: ");
+    for (i, letter) in EXTENSION_NAMES.chars().enumerate() {
+        let mask = 1 << i;
+        if extensions & mask > 0 {
+            print!("{}", letter);
+        }
+    }
+    println!();
+    printhdr!("Extensions");
+    for (i, desc) in EXTENSION_DESCRIPTIONS.iter().enumerate() {
+        let mask = 1 << i;
+        if extensions & mask > 0 {
+            println!("{}", desc);
+        }
+    }
+}
+
+pub fn setup_trap() {
+    let address = StaticLayout::get().trap_vector;
+    let mask = address & 0b11;
+    if mask != 0 {
+        panic!("Trap vector not aligned to 4-byte boundary: {:x}", address);
+    }
+    set_trap_vector(address);
 }

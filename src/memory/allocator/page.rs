@@ -1,31 +1,44 @@
+use core::mem::size_of;
+
 use crate::layout::StaticLayout;
 
-use crate::memory::{ALLOC_START, PAGE_SIZE, PAGE_ADDR_MAGNITIDE};
-use crate::mmu::Page;
-use crate::{print, println};
-
+use crate::{print, print_title, println};
 
 pub mod bitmap;
 use bitmap::{page_table, PageMarker};
+use fiveos_riscv::mmu::page_table::PAGE_SIZE;
+use fiveos_riscv::mmu::{align_address_to_page, Page};
 
-/// Produces a page-aligned address by adding one
-/// less than the page size (4095), then masking low bits
-/// to decrease the address back to the nearest page boundary
-pub const fn align_address_to_page(address: usize) -> usize {
-    align_power(address, PAGE_ADDR_MAGNITIDE)
-}
+/// pointer to the first allocatable-page, i.e. the first
+/// free page-aligned address in memory located after the
+/// bitmap (bytemap) of all pages.
+static mut ALLOC_START: usize = 0;
 
-/// rounds the address up to the next aligned value. if the value is already aligned, it is unchanged.
-/// alignment is such that address % alignment == 0;
-pub const fn align_to(address: usize, alignment: usize) -> usize {
-    let mask = alignment - 1;
-    (address + mask) & !mask
-}
+/// Setup the kernel's page table to keep track of allocations.
+pub fn setup() {
+    print_title!("Setup Memory Allocation");
+    let layout = StaticLayout::get();
+    let (page_table, total_page_count) = page_table();
+    println!("{} pages x {}-bytes", total_page_count, PAGE_SIZE);
+    for page in page_table.iter_mut() {
+        page.clear();
+    }
 
-/// rounds the address up to the next aligned value. if the value is already aligned, it is unchanged.
-/// alignment is such that the number of low bits equal to power is set to zero.
-pub const fn align_power(address: usize, power: usize) -> usize {
-    align_to(address, 1 << power)
+    let end_of_allocation_table = layout.heap_start + total_page_count * size_of::<PageMarker>();
+    println!(
+        "Allocation Table: {:x} - {:x}",
+        layout.heap_start, end_of_allocation_table
+    );
+
+    let alloc_start = unsafe {
+        ALLOC_START = align_address_to_page(end_of_allocation_table);
+        ALLOC_START
+    };
+    println!(
+        "Usable Pages: {:x} - {:x}",
+        alloc_start,
+        alloc_start + total_page_count * PAGE_SIZE
+    );
 }
 
 pub struct PageContents(core::sync::atomic::AtomicU8);

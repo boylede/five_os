@@ -1,47 +1,38 @@
 extern crate alloc;
 
-use core::alloc::{GlobalAlloc, Layout};
+use fiveos_riscv::mmu::page_table::descriptor::PageTableDescriptor;
+use fiveos_riscv::mmu::page_table::forty_eight::SV_FORTY_EIGHT;
+use fiveos_riscv::mmu::page_table::thirty_nine::SV_THIRTY_NINE;
+use fiveos_riscv::mmu::page_table::thirty_two::SV_THIRTY_TWO;
+use fiveos_riscv::mmu::{set_translation_table, TableTypes};
 
-use crate::kmem::{kzmalloc, kfree};
-
-use crate::{print, println};
+use crate::kmem;
 
 pub mod allocator;
 
-/// pointer to the first allocatable-page, i.e. the first
-/// free page-aligned address in memory located after the
-/// bitmap (bytemap) of all pages.
-static mut ALLOC_START: usize = 0;
-/// page size per riscv Sv39 spec is 4096 bytes
-/// which needs 12 bits to address each byte inside
-pub const PAGE_ADDR_MAGNITIDE: usize = 12;
-/// size of the smallest page allocation
-pub const PAGE_SIZE: usize = 1 << PAGE_ADDR_MAGNITIDE;
-/// a mask with low 12 bits set
-pub const PAGE_ADDR_MASK: usize = PAGE_SIZE - 1;
+/// Global that stores the type of the page table in use.
+/// Provided so software can support multiple types of page tables
+/// and pick between them depending on hardware support at runtime.
+static mut PAGE_TABLE_TYPE: TableTypes = TableTypes::Sv39;
 
-struct BumpPointerAlloc {
-    head: usize,
-    end: usize,
-}
-
-unsafe impl GlobalAlloc for BumpPointerAlloc {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        kzmalloc(layout.size())
-    }
-    unsafe fn dealloc(&self, ptr: *mut u8, _: Layout) {
-        println!("dropping {:x}", ptr as usize);
-        kfree(ptr);
+pub unsafe fn get_global_descriptor() -> &'static PageTableDescriptor {
+    match unsafe { PAGE_TABLE_TYPE } {
+        TableTypes::None => panic!("MMU not configured"),
+        TableTypes::Sv32 => &SV_THIRTY_TWO,
+        TableTypes::Sv39 => &SV_THIRTY_NINE,
+        TableTypes::Sv48 => &SV_FORTY_EIGHT,
     }
 }
 
-#[global_allocator]
-static HEAP: BumpPointerAlloc = BumpPointerAlloc {
-    head: 0x8800_0000,
-    end: 0x9000_0000,
-};
-
-#[alloc_error_handler]
-fn on_oom(_layout: Layout) -> ! {
-    panic!("OOM");
+/// called in kinit
+/// attempt to set the translation table to the kernel translation table,
+/// and set the type of translation used.
+/// panics if implementation does not support desired translation spec
+/// todo: don't panic, return error or supported translation spec instead
+/// todo: write PAGE_TABLE_TYPE with the resulting type
+pub fn setup() {
+    let kernel_page_table = kmem::get_page_table();
+    if !set_translation_table(TableTypes::Sv39, kernel_page_table) {
+        panic!("address translation not supported on this processor.");
+    }
 }

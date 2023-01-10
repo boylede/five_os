@@ -1,10 +1,10 @@
+use fiveos_riscv::mmu::page_table::descriptor::PageTableDescriptor;
+use fiveos_riscv::mmu::page_table::untyped::PageTableUntyped;
+use fiveos_riscv::mmu::page_table::PAGE_SIZE;
+use fiveos_riscv::mmu::EntryFlags;
+
 use crate::memory::allocator::page::{alloc, zalloc};
-use crate::mmu::page_table::untyped::PageTableUntyped;
-use crate::mmu::EntryFlags;
-use crate::{
-    memory::{ PAGE_SIZE},
-    trap::TrapFrame,
-};
+use crate::trap::TrapFrame;
 
 // todo: replace with atomic increment
 static mut PID_COUNTER: u32 = 0;
@@ -35,7 +35,7 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn new(func: fn()) -> Option<Process> {
+    pub fn new(func: fn(), descriptor: &PageTableDescriptor) -> Option<Process> {
         let func = func as usize;
         let id = unsafe {
             let id = PID_COUNTER;
@@ -47,7 +47,7 @@ impl Process {
         let page_table = zalloc(1)? as *mut PageTableUntyped;
         unsafe {
             let table = page_table.as_mut().unwrap();
-            table.map(0, 0, 0, EntryFlags::USER_READ_WRITE);
+            table.map(descriptor, 0, 0, 0, EntryFlags::USER_READ_WRITE, zalloc);
         }
 
         let mut trap_frame = TrapFrame::zero();
