@@ -3,7 +3,7 @@ use core::mem::size_of;
 use crate::layout::StaticLayout;
 use crate::mem::page::{align_address_to_page, alloc_table_entry_to_page_address};
 use crate::mem::{ALLOC_START, PAGE_SIZE};
-use crate::{print, println};
+use crate::{print, print_title, printhdr, println};
 
 #[repr(transparent)]
 pub struct PageMarker {
@@ -65,7 +65,7 @@ impl Pageflags {
 
 /// Setup the kernel's page table to keep track of allocations.
 pub fn setup() {
-    println!("----------- Dynamic Layout --------------");
+    print_title!("Setup Memory Allocation");
     let layout = StaticLayout::get();
     let (page_table, total_page_count) = page_table();
     println!("{} pages x {}-bytes", total_page_count, PAGE_SIZE);
@@ -100,7 +100,7 @@ pub fn page_table() -> (&'static mut [PageMarker], usize) {
 
 /// prints out the currently allocated pages
 pub fn print_mem_bitmap() {
-    println!("----------- Allocator Bitmap --------------");
+    print_title!("Allocator Bitmap");
     let (page_table, page_count) = page_table();
     {
         let start = ((page_table as *const _) as *const PageMarker) as usize;
@@ -112,7 +112,7 @@ pub fn print_mem_bitmap() {
         let alloc_end = alloc_start + page_count * PAGE_SIZE;
         println!("Usable Pages:\t{:x} - {:x}", alloc_start, alloc_end);
     }
-    println!("   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+    printhdr!();
     let mut middle = false;
     let mut start = 0;
     for page in page_table.iter_mut() {
@@ -132,12 +132,11 @@ pub fn print_mem_bitmap() {
             }
         }
     }
-    println!("   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+    printhdr!();
     {
         let used = page_table.iter().filter(|page| page.is_taken()).count();
         println!("Allocated pages: {} = {} bytes", used, used * PAGE_SIZE);
         let free = page_count - used;
         println!("Free pages: {} = {} bytes", free, free * PAGE_SIZE);
     }
-    println!("----------------------------------------");
 }

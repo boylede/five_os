@@ -82,10 +82,10 @@ impl StaticLayout {
     }
 }
 
-use crate::{print, println};
+use crate::{print, print_title, println};
 
 pub fn layout_sanity_check() {
-    println!("----------- Static Layout ---------------");
+    print_title!("Static Layout Sanity Check");
     let l = StaticLayout::get();
     println!(
         "text:\t{:x} - {:x}\t{}-bytes",

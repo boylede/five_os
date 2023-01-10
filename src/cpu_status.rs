@@ -15,7 +15,7 @@ extern "C" {
 
 use crate::layout::StaticLayout;
 use crate::mem::page::align_address_to_page;
-use crate::{print, println};
+use crate::{print, print_title, printhdr, println};
 
 #[derive(Debug)]
 pub struct Misa {
@@ -55,7 +55,7 @@ const EXTENSION_DESCRIPTIONS: [&str; 26] = [
 ];
 
 pub fn print_misa_info() {
-    println!("--- MISA INFO ---");
+    printhdr!("Machine Instruction Set Architecture");
     let misa = unsafe { asm_get_misa() };
     let xlen = {
         let mut misa: i64 = misa as i64;
@@ -93,7 +93,7 @@ pub fn print_misa_info() {
         }
     }
     println!();
-    println!("--- Extensions ---");
+    printhdr!("Extensions");
     for (i, desc) in EXTENSION_DESCRIPTIONS.iter().enumerate() {
         let mask = 1 << i;
         if extensions & mask > 0 {
@@ -132,7 +132,7 @@ pub fn setup_trap() {
 }
 
 pub fn inspect_trap_vector() {
-    println!("----------- Trap --------------");
+    printhdr!("Trap");
     let mtvec = unsafe { asm_get_mtvec() };
     if mtvec == 0 {
         println!("trap vector not initialized");
@@ -214,10 +214,12 @@ pub fn print_cpu_info() {
     let vendor = unsafe { asm_get_mvendorid() };
     let architecture = unsafe { asm_get_marchid() };
     let implementation = unsafe { asm_get_mimpid() };
-    println!("--- CPU INFO ---");
-    println!("Vendor: {:x}", vendor);
-    println!("Architecture: {:x}", architecture);
-    println!("Implementation: {:x}", implementation);
+    print_title!("CPU INFO");
+    println!(
+        "Vendor: {:x} | Architecture: {:x} | Implementation: {:x}",
+        vendor, architecture, implementation
+    );
+    print_misa_info();
 }
 
 pub fn print_trap_info() {

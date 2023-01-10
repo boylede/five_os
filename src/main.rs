@@ -21,7 +21,6 @@ extern "C" fn kinit() {
     cpu::uart::Uart::default().init();
     logo::print_logo();
     cpu_status::print_cpu_info();
-    cpu_status::print_misa_info();
     layout::layout_sanity_check();
 
     let layout = StaticLayout::get();
@@ -31,7 +30,7 @@ extern "C" fn kinit() {
     let kernel_page_table = kmem::get_page_table();
     //let page_table_erased = kernel_page_table as *const _ as usize;
 
-    println!("---------- Kernel Space Identity Map ----------");
+    print_title!("Kernel Space Identity Map");
     {
         // map kernel page table
         let kpt = kernel_page_table as *const PageTableUntyped as usize;
@@ -195,13 +194,10 @@ extern "C" fn kinit() {
         );
     }
 
-    println!("Finished identity map of kernel memory");
     mem::bitmap::print_mem_bitmap();
 
     // print_map(kernel_page_table);
-    println!("done with kinit");
 
-    println!("setting satp to {:x}", satp_val);
     unsafe {
         asm!("csrw satp, {}", in(reg) satp_val);
         asm!("sfence.vma zero, {}", in(reg)0);
@@ -210,13 +206,14 @@ extern "C" fn kinit() {
 
 #[no_mangle]
 extern "C" fn kmain() {
-    println!("entering kmain");
+    print_title!("entering kmain");
 
+    println!("setting up UART receiver");
     PLIC.set_threshold(0);
     PLIC.enable_interrupt(10);
     PLIC.set_priority(10, 1);
 
-    println!("reached end, looping");
+    printhdr!("reached end, looping");
     loop {}
 }
 
