@@ -14,6 +14,7 @@ members = [
 [dependencies]
 fiveos_riscv = {path="crates/fiveos_riscv"}
 fiveos_virtio = {path="crates/fiveos_virtio"}
+fiveos_allocator = {path="crates/fiveos_allocator"}
 
 [[bin]]
 name = "five_os"

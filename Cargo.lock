@@ -13,9 +13,14 @@ name = "five_os"
 version = "0.2.0"
 dependencies = [
  "cc",
+ "fiveos_allocator",
  "fiveos_riscv",
  "fiveos_virtio",
 ]
+
+[[package]]
+name = "fiveos_allocator"
+version = "0.2.0"
 
 [[package]]
 name = "fiveos_riscv"
