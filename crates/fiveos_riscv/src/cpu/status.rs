@@ -13,56 +13,83 @@ extern "C" {
     pub fn asm_get_mstatus() -> usize;
     pub fn asm_set_mstatus(_: usize);
     pub fn asm_get_mepc() -> usize;
+    pub fn asm_read_misa_xlen() -> usize;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Misa {
     xlen: u8,
     extensions: u32,
 }
 
-pub const EXTENSION_NAMES: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-pub const EXTENSION_DESCRIPTIONS: [&str; 26] = [
-    "Atomic",
-    "reserved B",
-    "Compressed",
-    "Double-precision floating point",
-    "rv32E base isa",
-    "single-precision Floating point",
-    "\"additional standards present (G)\"",
-    "Hypervisor",
-    "rv32I/64I/128I base isa",
-    "reserved J",
-    "reserved K",
-    "reserved L",
-    "integer Multiply/divide",
-    "user-level interrupts (N)",
-    "reserved O",
-    "reserved P",
-    "Quad precision floating point",
-    "reserved R",
-    "Supervisor Mode",
-    "reserved T",
-    "User Mode",
-    "reserved V",
-    "reserved W",
-    "\"non-standard eXtensions present\"",
-    "reserved Y",
-    "reserved Z",
-];
-
-pub fn get_base_width() -> u64 {
-    let mut test: u64 = 4;
-    test <<= 31;
-    if test == 0 {
-        32
-    } else {
-        test <<= 31;
-        if test > 0 {
-            128
+impl Misa {
+    pub const EXTENSION_NAMES: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    pub const EXTENSION_DESCRIPTIONS: [&str; 26] = [
+        "Atomic",
+        "reserved B",
+        "Compressed",
+        "Double-precision floating point",
+        "rv32E base isa",
+        "single-precision Floating point",
+        "\"additional standards present (G)\"",
+        "Hypervisor",
+        "rv32I/64I/128I base isa",
+        "reserved J",
+        "reserved K",
+        "reserved L",
+        "integer Multiply/divide",
+        "user-level interrupts (N)",
+        "reserved O",
+        "reserved P",
+        "Quad precision floating point",
+        "reserved R",
+        "Supervisor Mode",
+        "reserved T",
+        "User Mode",
+        "reserved V",
+        "reserved W",
+        "\"non-standard eXtensions present\"",
+        "reserved Y",
+        "reserved Z",
+    ];
+    const EXTENSION_MASK: usize = (1 << 26) - 1;
+    pub fn get() -> Option<Misa> {
+        let misa = unsafe { asm_get_misa() };
+        if misa == 0 {
+            None
         } else {
-            64
+            let xlen = unsafe { asm_read_misa_xlen() } as u8;
+            let extensions = (misa & Self::EXTENSION_MASK) as u32;
+
+            Some(Misa { xlen, extensions })
+        }
+    }
+    pub fn xlen(&self) -> u8 {
+        self.xlen
+    }
+    pub fn extensions(&self) -> u32 {
+        self.extensions
+    }
+    pub fn extension_name(extension: u8) -> Option<char> {
+        Self::EXTENSION_NAMES.chars().nth(extension as usize)
+    }
+    pub fn extension_description(extension: u8) -> Option<&'static str> {
+        Self::EXTENSION_DESCRIPTIONS
+            .into_iter()
+            .nth(extension as usize)
+    }
+    fn test_base_width() -> u8 {
+        let mut test: usize = 4;
+        test <<= 31;
+        if test == 0 {
+            32
+        } else {
+            test <<= 31;
+            if test > 0 {
+                128
+            } else {
+                64
+            }
         }
     }
 }
@@ -96,16 +123,16 @@ impl Satp {
         unimplemented!()
     }
     pub fn ppn(&self) -> usize {
-        match get_base_width() {
-            32 => self.0 & ((1 << 22) - 1),
-            64 => self.0 & ((1 << 44) - 1),
+        match Misa::get().map(|misa| misa.xlen()) {
+            Some(32) => self.0 & ((1 << 22) - 1),
+            Some(64) => self.0 & ((1 << 44) - 1),
             _ => unimplemented!(),
         }
     }
     pub fn set_mode(&mut self, value: u8) {
-        match get_base_width() {
-            32 => unimplemented!(),
-            64 => {
+        match Misa::get().map(|misa| misa.xlen()) {
+            Some(32) => unimplemented!(),
+            Some(64) => {
                 let mut mode: usize = (value & ((1 << 4) - 1)) as usize;
                 mode <<= 60;
                 self.0 &= (1 << 60) - 1;
