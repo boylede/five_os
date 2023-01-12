@@ -37,7 +37,7 @@ impl PageTableUntyped {
         phys: usize,
         size: usize,
         flags: EntryFlags,
-        zalloc: fn(usize) -> Option<*mut [Page]>,
+        zalloc: &mut dyn FnMut(usize) -> Option<*mut u8>,
     ) {
         let aligned_vstart = virt & !PAGE_ADDR_MASK;
         let aligned_pstart = phys & !PAGE_ADDR_MASK;
@@ -77,7 +77,7 @@ impl PageTableUntyped {
         start: usize,
         end: usize,
         flags: EntryFlags,
-        zalloc: fn(usize) -> Option<*mut [Page]>,
+        zalloc: &mut dyn FnMut(usize) -> Option<*mut u8>,
     ) {
         unsafe {
             // use TableTypes::*;
@@ -98,7 +98,7 @@ fn internal_map_range(
     end: usize,
     flags: EntryFlags,
     descriptor: &PageTableDescriptor,
-    zalloc: fn(usize) -> Option<*mut [Page]>,
+    zalloc: &mut dyn FnMut(usize) -> Option<*mut u8>,
 ) {
     // println!("mapping {:x} to {:x} at page table located {:x}", start, end, ((root as *mut PageTable) as usize));
 
@@ -142,7 +142,7 @@ fn map_root(
     flags: EntryFlags,
     page_size: PageSize,
     descriptor: &PageTableDescriptor,
-    zalloc: fn(usize) -> Option<*mut [Page]>,
+    zalloc: &mut dyn FnMut(usize) -> Option<*mut u8>,
 ) -> [usize; 4] {
     map(
         table,
@@ -164,7 +164,7 @@ fn map(
     page_size: PageSize,
     level: usize,
     descriptor: &PageTableDescriptor,
-    zalloc: fn(usize) -> Option<*mut [Page]>,
+    zalloc: &mut dyn FnMut(usize) -> Option<*mut u8>,
 ) -> [usize; 4] {
     let mut newly_allocated_pages: [usize; 4] = [0; 4];
     // println!("mapping {:x} -> {:x} @ {}", virtual_address, physical_address, level);

@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use crate::mmu::align_address_to_page;
 
 extern "C" {
@@ -25,36 +27,40 @@ pub struct Misa {
 impl Misa {
     pub const EXTENSION_NAMES: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     pub const EXTENSION_DESCRIPTIONS: [&str; 26] = [
-        "Atomic",
-        "reserved B",
+        "Atomics",
+        "B-reserved",
         "Compressed",
         "Double-precision floating point",
-        "rv32E base isa",
-        "single-precision Floating point",
-        "\"additional standards present (G)\"",
+        "Embedded base ISA",
+        "Single-precision floating point",
+        "G-additional standards present",
         "Hypervisor",
-        "rv32I/64I/128I base isa",
-        "reserved J",
-        "reserved K",
-        "reserved L",
-        "integer Multiply/divide",
-        "user-level interrupts (N)",
-        "reserved O",
-        "reserved P",
+        "Integer base isa",
+        "J-reserved",
+        "K-reserved",
+        "L-reserved",
+        "Multiply/divide integers",
+        "N-user-level interrupts",
+        "O-reserved",
+        "P-reserved",
         "Quad precision floating point",
-        "reserved R",
+        "R-reserved",
         "Supervisor Mode",
-        "reserved T",
+        "T-reserved",
         "User Mode",
-        "reserved V",
-        "reserved W",
-        "\"non-standard eXtensions present\"",
-        "reserved Y",
-        "reserved Z",
+        "V-reserved",
+        "W-reserved",
+        "X-nonstandard extensions present",
+        "Y-reserved",
+        "Z-reserved",
     ];
     const EXTENSION_MASK: usize = (1 << 26) - 1;
     pub fn get() -> Option<Misa> {
-        let misa = unsafe { asm_get_misa() };
+        let misa = unsafe {
+            let misa: usize;
+            asm!("csrr   {}, misa", out(reg) misa);
+            misa
+        };
         if misa == 0 {
             None
         } else {
@@ -77,20 +83,6 @@ impl Misa {
         Self::EXTENSION_DESCRIPTIONS
             .into_iter()
             .nth(extension as usize)
-    }
-    fn test_base_width() -> u8 {
-        let mut test: usize = 4;
-        test <<= 31;
-        if test == 0 {
-            32
-        } else {
-            test <<= 31;
-            if test > 0 {
-                128
-            } else {
-                64
-            }
-        }
     }
 }
 
