@@ -5,7 +5,8 @@ macro_rules! print {
     ($($args:tt)+) => ({
         use core::fmt::Write;
         use fiveos_riscv::cpu;
-        let _ = write!(cpu::uart::Uart::default(), $($args)+);
+        use fiveos_virtio::uart::UART_BASE_ADDRESS;
+        let _ = write!(cpu::uart::Uart::<{UART_BASE_ADDRESS}>::default(), $($args)+);
     });
 }
 

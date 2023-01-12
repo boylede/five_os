@@ -1,5 +1,6 @@
 use core::num::NonZeroU32;
 
+pub const PLIC_BASE_ADDRESS: usize = 0x0c00_0000;
 const ENABLE: usize = 0x0c00_2000;
 const PRIORITY: usize = 0x0c00_0000;
 const PENDING: usize = 0x0c00_1000;

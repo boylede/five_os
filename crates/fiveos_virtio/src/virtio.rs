@@ -1,0 +1,3 @@
+pub const VIRTIO_BASE_ADDRESS: usize = 0x1000_1000;
+pub const VIRTIO_SIZE: usize = 0x1000;
+pub const VIRTIO_END_ADDRESS: usize = VIRTIO_BASE_ADDRESS + VIRTIO_SIZE;

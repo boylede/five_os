@@ -1,6 +1,7 @@
 use core::ptr::null_mut;
 use fiveos_riscv::cpu::uart::Uart;
 use fiveos_virtio::plic::PLIC;
+use fiveos_virtio::uart::UART_BASE_ADDRESS;
 
 use crate::layout::StaticLayout;
 use crate::{print, println};
@@ -124,7 +125,7 @@ extern "C" fn rust_trap(
                             // on qemu/virtio this is the UART singaling input
                             // todo: can these match statements be extricated from the trap handler logic
                             // so different hardware can be supported by compile options
-                            if let Some(c) = Uart::default().get() {
+                            if let Some(c) = <Uart<UART_BASE_ADDRESS> as Default>::default().get() {
                                 match c {
                                     8 => {
                                         print!("\x08 \x08");
