@@ -2,32 +2,68 @@
 #![no_main]
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
 extern crate alloc;
-use core::arch::asm;
+use core::{arch::asm, ptr::null_mut};
 
 use alloc::{boxed::Box, string::String, vec};
-use five_os::{
-    memory::{allocator::page::zalloc, get_global_descriptor},
-    trap::TrapFrame,
-    *,
-};
+use five_os::{trap::TrapFrame, *};
 
+use fiveos_allocator::{
+    byte::{AllocList, BumpPointerAlloc},
+    page::{bitmap::PageMarker, Page, PageAllocator},
+};
 use fiveos_riscv::{
     cpu::{
         self,
         status::{
-            asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_misa, asm_get_mtvec,
-            asm_get_mvendorid, get_base_width, set_trap_vector, EXTENSION_DESCRIPTIONS,
-            EXTENSION_NAMES,
+            asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_mtvec, asm_get_mvendorid, Misa,
         },
     },
     mmu::{
         entry::PTEntryRead,
-        page_table::{descriptor::PageTableDescriptor, untyped::PageTableUntyped, PAGE_SIZE},
-        EntryFlags,
+        page_table::{
+            descriptor::PageTableDescriptor, forty_eight::SV_FORTY_EIGHT,
+            thirty_nine::SV_THIRTY_NINE, thirty_two::SV_THIRTY_TWO, untyped::PageTableUntyped,
+            PAGE_SIZE,
+        },
+        set_translation_table, EntryFlags, TableTypes,
     },
 };
 use fiveos_virtio::plic::PLIC;
 use layout::StaticLayout;
+
+// todo: improve how we initialize these statics
+#[global_allocator]
+static mut KERNEL_HEAP: BumpPointerAlloc<PAGE_SIZE> = BumpPointerAlloc::new(0, 0);
+
+#[alloc_error_handler]
+fn on_oom(_layout: core::alloc::Layout) -> ! {
+    panic!("OOM");
+}
+
+// todo: improve how we initialize these statics
+static mut KERNEL_PAGE_ALLOCATOR: PageAllocator<PAGE_SIZE> = PageAllocator::uninitalized();
+
+// todo: eliminate accesses to these
+static mut KMEM_HEAD: *mut AllocList = null_mut();
+static mut KMEM_SIZE: usize = 64;
+static mut ALLOC_START: usize = 0;
+
+/// MMU page table for kernel
+static mut KMEM_PAGE_TABLE: *mut PageTableUntyped = null_mut();
+
+/// Global that stores the type of the page table in use.
+/// Provided so software can support multiple types of page tables
+/// and pick between them depending on hardware support at runtime.
+static mut PAGE_TABLE_TYPE: TableTypes = TableTypes::Sv39;
+
+pub unsafe fn get_global_descriptor() -> &'static PageTableDescriptor {
+    match unsafe { PAGE_TABLE_TYPE } {
+        TableTypes::None => panic!("MMU not configured"),
+        TableTypes::Sv32 => &SV_THIRTY_TWO,
+        TableTypes::Sv39 => &SV_THIRTY_NINE,
+        TableTypes::Sv48 => &SV_FORTY_EIGHT,
+    }
+}
 
 /// Our first entry point out of the assembly boot.s
 #[no_mangle]
@@ -35,28 +71,76 @@ extern "C" fn kinit() {
     cpu::uart::Uart::default().init();
     logo::print_logo();
     print_cpu_info();
-    layout::layout_sanity_check();
 
     let layout = StaticLayout::get();
-    memory::allocator::page::setup();
-    kmem::setup();
-    memory::setup();
-    let kernel_page_table = kmem::get_page_table();
-    //let page_table_erased = kernel_page_table as *const _ as usize;
+    layout_sanity_check(layout);
+
+    // Setup the kernel's page table to keep track of allocations.
+    unsafe {
+        print_title!("Setup Memory Allocation");
+        let layout = StaticLayout::get();
+        KERNEL_PAGE_ALLOCATOR = PageAllocator::new(layout.heap_start, layout.memory_end);
+
+        let count = KERNEL_PAGE_ALLOCATOR.page_count();
+        println!("{} pages x {}-bytes", count, PAGE_SIZE);
+
+        let end_of_allocation_table =
+            layout.heap_start + count * core::mem::size_of::<PageMarker>();
+        println!(
+            "Allocation Table: {:x} - {:x}",
+            layout.heap_start, end_of_allocation_table
+        );
+
+        let alloc_start = align_to(end_of_allocation_table, PAGE_SIZE);
+        ALLOC_START = alloc_start;
+        println!(
+            "Usable Pages: {:x} - {:x}",
+            alloc_start,
+            alloc_start + count * PAGE_SIZE
+        );
+    }
+    let page_allocator = unsafe { &mut KERNEL_PAGE_ALLOCATOR };
+    // allocate pages for kernel memory, initialize bumplist/skiplist allocator
+    // allocate page for kernel's page table
+    unsafe {
+        let k_alloc = page_allocator.zalloc(KMEM_SIZE).unwrap();
+        let k_alloc_end = (k_alloc as *mut usize as usize) + (KMEM_SIZE * PAGE_SIZE);
+        // assert!(!k_alloc.is_null());
+        KMEM_HEAD = k_alloc as *mut Page<PAGE_SIZE> as *mut AllocList;
+        let kmem = KMEM_HEAD.as_mut().unwrap();
+        kmem.set_free();
+        kmem.set_size(KMEM_SIZE * PAGE_SIZE);
+        KMEM_PAGE_TABLE = page_allocator.zalloc(1).unwrap() as *mut PageTableUntyped;
+        // KMEM_PAGE_TABLE.initialize();
+        KERNEL_HEAP = BumpPointerAlloc::new(k_alloc as *mut usize as usize, k_alloc_end);
+    }
+
+    let kernel_page_table = unsafe { KMEM_PAGE_TABLE.as_mut().unwrap() };
+    if !set_translation_table(TableTypes::Sv39, kernel_page_table) {
+        panic!("address translation not supported on this processor.");
+    }
 
     print_title!("Kernel Space Identity Map");
     let descriptor = unsafe { get_global_descriptor() };
+    let mut kernel_zalloc =
+        |count: usize| -> Option<*mut u8> { page_allocator.zalloc(count).map(|p| p as *mut u8) };
     {
         // map kernel page table
         let kpt = kernel_page_table as *const PageTableUntyped as usize;
         println!("Kernel root page table: {:x}", kpt);
 
-        kernel_page_table.identity_map(descriptor, kpt, kpt, EntryFlags::READ_WRITE, zalloc);
+        kernel_page_table.identity_map(
+            descriptor,
+            kpt,
+            kpt,
+            EntryFlags::READ_WRITE,
+            &mut kernel_zalloc,
+        );
     }
     {
         // map kernel's dynamic memory
-        let kernel_heap = kmem::get_heap_location();
-        let page_count = kmem::allocation_count();
+        let kernel_heap = unsafe { KMEM_HEAD as usize };
+        let page_count = unsafe { KMEM_SIZE };
         let end = kernel_heap + page_count * PAGE_SIZE;
         println!("Dynamic Memory: {:x} -> {:x}  RW", kernel_heap, end);
         kernel_page_table.identity_map(
@@ -64,7 +148,7 @@ extern "C" fn kinit() {
             kernel_heap,
             end,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -80,7 +164,7 @@ extern "C" fn kinit() {
             layout.heap_start,
             layout.heap_start + page_count,
             EntryFlags::READ_EXECUTE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -94,7 +178,7 @@ extern "C" fn kinit() {
             layout.text_start,
             layout.text_end,
             EntryFlags::READ_EXECUTE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -109,7 +193,7 @@ extern "C" fn kinit() {
             layout.rodata_end,
             // probably overlaps with text, so keep execute bit on
             EntryFlags::READ_EXECUTE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -123,7 +207,7 @@ extern "C" fn kinit() {
             layout.data_start,
             layout.data_end,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -137,7 +221,7 @@ extern "C" fn kinit() {
             layout.bss_start,
             layout.bss_end,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -151,7 +235,7 @@ extern "C" fn kinit() {
             layout.stack_start,
             layout.stack_end,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -167,7 +251,7 @@ extern "C" fn kinit() {
             mm_hardware_start,
             mm_hardware_end,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -183,7 +267,7 @@ extern "C" fn kinit() {
             mm_hardware_start,
             mm_hardware_end,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -199,7 +283,7 @@ extern "C" fn kinit() {
             mm_hardware_start,
             mm_hardware_end,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
     {
@@ -215,7 +299,7 @@ extern "C" fn kinit() {
             mm_hardware_start,
             mm_hardware_end,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
 
@@ -230,9 +314,7 @@ extern "C" fn kinit() {
         // to be used in trap.s
 
         // get a page for the trap stack frame
-        // todo: this could be in kmem init instead
-        let trap_stack =
-            zalloc(1).expect("failed to initialize trap stack") as *mut [_] as *mut u8 as usize;
+        let trap_stack = kernel_zalloc(1).expect("failed to initialize trap stack") as usize;
         println!(
             "Trap stack: {:x} -> {:x}  RW",
             trap_stack,
@@ -243,12 +325,10 @@ extern "C" fn kinit() {
             trap_stack,
             trap_stack + PAGE_SIZE,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
 
         let global_trapframe_address = unsafe {
-            // Safety: we are accessing a static mut. we are safe in kinit
-            // because we are the only thing running
             let frame: &mut TrapFrame = &mut trap::GLOBAL_TRAPFRAMES[0];
             frame.satp = satp_val;
             frame.trap_stack = (trap_stack + PAGE_SIZE) as *mut _;
@@ -264,13 +344,11 @@ extern "C" fn kinit() {
             global_trapframe_address,
             global_trapframe_address + PAGE_SIZE,
             EntryFlags::READ_WRITE,
-            zalloc,
+            &mut kernel_zalloc,
         );
     }
 
-    memory::allocator::page::bitmap::print_mem_bitmap();
-
-    // print_map(kernel_page_table);
+    print_mem_bitmap();
 
     unsafe {
         asm!("csrw satp, {}", in(reg) satp_val);
@@ -291,17 +369,16 @@ extern "C" fn kmain() {
         printhdr!("testing allocations ");
         let k = Box::<u32>::new(100);
         println!("Boxed value = {}", &k);
-        println!("Boxed address = {:x}", Box::leak(k) as *const _ as usize);
         let sparkle_heart = vec![240, 159, 146, 150];
         let sparkle_heart = String::from_utf8(sparkle_heart).unwrap();
         println!("String = {}", sparkle_heart);
         println!("\n\nAllocations of a box, vector, and string");
-        kmem::print_table();
+        kmem_print_table();
         println!("test");
     }
     println!("test 2");
     println!("\n\nEverything should now be free:");
-    kmem::print_table();
+    kmem_print_table();
 
     printhdr!("reached end, looping");
     loop {}
@@ -313,6 +390,7 @@ extern "C" fn kinit_hart() {
     abort();
 }
 
+////////////////////////////////////////////// todo: relocate below this line
 pub fn print_cpu_info() {
     let vendor = unsafe { asm_get_mvendorid() };
     let architecture = unsafe { asm_get_marchid() };
@@ -324,7 +402,7 @@ pub fn print_cpu_info() {
     );
     print_misa_info();
 }
-////////////////////////////////////////////// todo: relocate
+
 pub fn print_trap_info() {
     let mepc = unsafe { asm_get_mepc() };
     println!("mepc: {:x}", mepc);
@@ -373,8 +451,6 @@ fn inner_print_map(
         "Reading pagetable located at 0x{:x}:",
         table as *const PageTableUntyped as usize
     );
-    // let page_size = 1 << (12+bits_known);
-    // println!("memory region described by each entry is: 0x{:x}-bytes", page_size);
 
     for index in 0..descriptor.size / descriptor.entry_size {
         let resulting_address = base_address + (index * page_size);
@@ -389,55 +465,31 @@ fn inner_print_map(
                 entry.0
             );
             if entry.extract_flags().is_branch() {
-                // println!("branching");
                 let next = entry.address();
                 let next_table = unsafe { (next as *const PageTableUntyped).as_ref().unwrap() };
 
                 inner_print_map(next_table, descriptor, resulting_address, descent + 1);
-
-                // println!("rejoining");
-            } else {
-                // println!("{}-{}: 0x{:x}-0x{:x}: {:?}", descent, index, resulting_address,resulting_address+page_size-1, entry);
             }
-        } else {
-            // println!("{}-{}: 0x{:x}-0x{:x}: not mapped.", descent, index, resulting_address, resulting_address+page_size-1);
         }
     }
 }
 
 pub fn print_misa_info() {
     printhdr!("Machine Instruction Set Architecture");
-    let misa = unsafe { asm_get_misa() };
-    let xlen = {
-        let mut misa: i64 = misa as i64;
-        // if sign bit is 0, XLEN is 32
-        if misa > 0 {
-            32
-        } else {
-            // shift misa over 1 bit to check next-highest bit
-            misa <<= 1;
-            // if new sign bit is 0, XLEN is 64
-            if misa > 0 {
-                64
-            } else {
-                // both high bits are 1, so xlen is 128
-                128
-            }
-        }
-    };
-    let checked_width = get_base_width();
-    if xlen != checked_width {
+    let misa = Misa::get();
+    let Some(misa) = misa else {
         println!(
-            "ERROR: MISA reports different base width than empirically found: {} vs {}",
-            xlen, checked_width
+            "ERROR: MISA reported unexpected value 0x{:?}",
+            misa
         );
-    } else {
-        println!("Base ISA Width: {}", xlen);
-    }
+        return;
+    };
 
-    let extensions = misa & 0x01FF_FFFF;
+    println!("Reported base width: {}", misa.xlen());
+
+    let extensions = misa.extensions();
     print!("Extensions: ");
-    for (i, letter) in EXTENSION_NAMES.chars().enumerate() {
+    for (i, letter) in Misa::EXTENSION_NAMES.chars().enumerate() {
         let mask = 1 << i;
         if extensions & mask > 0 {
             print!("{}", letter);
@@ -445,7 +497,7 @@ pub fn print_misa_info() {
     }
     println!();
     printhdr!("Extensions");
-    for (i, desc) in EXTENSION_DESCRIPTIONS.iter().enumerate() {
+    for (i, desc) in Misa::EXTENSION_DESCRIPTIONS.iter().enumerate() {
         let mask = 1 << i;
         if extensions & mask > 0 {
             println!("{}", desc);
@@ -453,11 +505,134 @@ pub fn print_misa_info() {
     }
 }
 
-pub fn setup_trap() {
-    let address = StaticLayout::get().trap_vector;
-    let mask = address & 0b11;
-    if mask != 0 {
-        panic!("Trap vector not aligned to 4-byte boundary: {:x}", address);
+pub fn alloc_table_entry_to_page_address(entry: &mut PageMarker) -> usize {
+    let alloc_start = unsafe { ALLOC_START };
+    let heap_start = StaticLayout::get().heap_start;
+    let page_entry = (entry as *mut _) as usize;
+    alloc_start + (page_entry - heap_start) * PAGE_SIZE
+}
+
+pub fn page_table() -> (&'static mut [PageMarker]) {
+    let layout = StaticLayout::get();
+    let heap_start = { layout.heap_start as *mut PageMarker };
+    let count = layout.heap_size / PAGE_SIZE;
+    let table = unsafe { core::slice::from_raw_parts_mut(heap_start, count) };
+    table
+}
+
+/// prints out the currently allocated pages
+pub fn print_mem_bitmap() {
+    print_title!("Allocator Bitmap");
+    let page_table = page_table();
+    let page_count = page_table.len();
+    {
+        let start = ((page_table as *const _) as *const PageMarker) as usize;
+        let end = start + page_count * core::mem::size_of::<PageMarker>();
+        println!("Alloc Table:\t{:x} - {:x}", start, end);
     }
-    set_trap_vector(address);
+    {
+        let alloc_start = unsafe { ALLOC_START };
+        let alloc_end = alloc_start + page_count * PAGE_SIZE;
+        println!("Usable Pages:\t{:x} - {:x}", alloc_start, alloc_end);
+    }
+    printhdr!();
+    let mut middle = false;
+    let mut start = 0;
+    for page in page_table.iter_mut() {
+        if page.is_taken() {
+            if !middle {
+                let page_address = alloc_table_entry_to_page_address(page);
+                print!("{:x} => ", page_address);
+                middle = true;
+                start = page_address;
+            }
+            if page.is_last() {
+                let page_address = alloc_table_entry_to_page_address(page) + PAGE_SIZE - 1;
+                let size = (page_address - start) / PAGE_SIZE;
+                print!("{:x}: {} page(s).", page_address, size + 1);
+                println!("");
+                middle = false;
+            }
+        }
+    }
+    printhdr!();
+    {
+        let used = page_table.iter().filter(|page| page.is_taken()).count();
+        println!("Allocated pages: {} = {} bytes", used, used * PAGE_SIZE);
+        let free = page_count - used;
+        println!("Free pages: {} = {} bytes", free, free * PAGE_SIZE);
+    }
+}
+
+/// prints the allocation table
+pub fn kmem_print_table() {
+    unsafe {
+        let mut head = KMEM_HEAD as *mut AllocList;
+        let tail = (head).add(KMEM_SIZE) as *mut AllocList;
+        while head < tail {
+            {
+                println!("inspecting {:x}", head as *mut u8 as usize);
+                let this = head.as_ref().unwrap();
+                println!(
+                    "{:p}: Length = {:<10} Taken = {}",
+                    this,
+                    this.get_size(),
+                    this.is_taken()
+                );
+            }
+            let next = (head as *mut u8).add((*head).get_size());
+            println!("checking next: {:x}", next as usize);
+            head = next as *mut AllocList;
+        }
+    }
+    println!("done printing alloc table");
+}
+
+/// rounds the address up to the next aligned value. if the value is already aligned, it is unchanged.
+/// alignment is such that address % alignment == 0;
+pub const fn align_to(address: usize, alignment: usize) -> usize {
+    let mask = alignment - 1;
+    (address + mask) & !mask
+}
+
+pub fn layout_sanity_check(l: &StaticLayout) {
+    print_title!("Static Layout Sanity Check");
+    println!(
+        "text:\t{:x} - {:x}\t{}-bytes",
+        l.text_start,
+        l.text_end,
+        l.text_end - l.text_start
+    );
+    println!(" trap:\t{:x} - {:x}??", l.trap_start, l.text_end);
+    println!("global:\t{:x}", l.global_pointer);
+    println!(
+        "rodata:\t{:x} - {:x}\t{}-bytes",
+        l.rodata_start,
+        l.rodata_end,
+        l.rodata_end - l.rodata_start
+    );
+    println!(
+        "data:\t{:x} - {:x}\t{}-bytes",
+        l.data_start,
+        l.data_end,
+        l.data_end - l.data_start
+    );
+    println!(
+        "bss:\t{:x} - {:x}\t{}-bytes",
+        l.bss_start,
+        l.bss_end,
+        l.bss_end - l.bss_start
+    );
+    println!(
+        " stack:\t{:x} - {:x}\t{}-bytes",
+        l.stack_start,
+        l.stack_end,
+        l.stack_end - l.stack_start
+    );
+    println!(
+        " heap:\t{:x} - {:x}\t{}-bytes",
+        l.heap_start,
+        l.heap_start + l.heap_size,
+        l.heap_size
+    );
 }

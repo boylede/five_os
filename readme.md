@@ -9,8 +9,10 @@ https://osblog.stephenmarz.com/ch1.html
 ## Current Status
 * UART communication
 * Page-grained allocation
+* Simple bump-allocator
 * Generate and walk page tables for use with the MMU, including Sv32, Sv39, and Sv48 virtual address modes. 
 * Trap handler pass to rust code
+
 
 
 ## Printout
@@ -18,7 +20,6 @@ https://osblog.stephenmarz.com/ch1.html
 Currently the OS prints the following status information from QEMU:
 
 ````
-
                     _________   ______  ____  ____
                    / __/  _/ | / / __/ / __ \/ __/
                   / _/_/ / | |/ / _/  / /_/ /\ \

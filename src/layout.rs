@@ -46,29 +46,30 @@ pub struct StaticLayout {
 }
 
 impl StaticLayout {
-    /// creates a stack-allocated structure with all of the addresses of areas in memory.
+    /// creates a stack-allocated structure with all
+    /// of the addresses of areas in memory.
     /// # Unsafe
-    /// Accessing a global defined outside rust is unsafe, therefor this function makes
-    /// heavy use of unsafe. We also convert those addresses (pointers) to integers.
-    pub fn new() -> StaticLayout {
+    /// Accessing a global defined outside rust is unsafe,
+    /// therefor this function is also unsafe
+    pub unsafe fn new() -> StaticLayout {
         StaticLayout {
-            text_start: unsafe { &_text_start as *const _ } as usize,
-            trap_start: unsafe { &_trap_start as *const _ } as usize,
-            text_end: unsafe { &_text_end as *const _ } as usize,
-            global_pointer: unsafe { &_global_pointer as *const _ } as usize,
-            rodata_start: unsafe { &_rodata_start as *const _ } as usize,
-            rodata_end: unsafe { &_rodata_end as *const _ } as usize,
-            data_start: unsafe { &_data_start as *const _ } as usize,
-            data_end: unsafe { &_data_end as *const _ } as usize,
-            bss_start: unsafe { &_bss_start as *const _ } as usize,
-            bss_end: unsafe { &_bss_end as *const _ } as usize,
-            memory_start: unsafe { &_memory_start as *const _ } as usize,
-            stack_start: unsafe { &_stack_start as *const _ } as usize,
-            stack_end: unsafe { &_stack_end as *const _ } as usize,
-            heap_start: unsafe { &_heap_start as *const _ } as usize,
-            heap_size: unsafe { &_heap_size as *const _ } as usize,
-            memory_end: unsafe { &_memory_end as *const _ } as usize,
-            trap_vector: unsafe { &asm_trap_vector as *const _ } as usize,
+            text_start: &_text_start as *const _ as usize,
+            trap_start: &_trap_start as *const _ as usize,
+            text_end: &_text_end as *const _ as usize,
+            global_pointer: &_global_pointer as *const _ as usize,
+            rodata_start: &_rodata_start as *const _ as usize,
+            rodata_end: &_rodata_end as *const _ as usize,
+            data_start: &_data_start as *const _ as usize,
+            data_end: &_data_end as *const _ as usize,
+            bss_start: &_bss_start as *const _ as usize,
+            bss_end: &_bss_end as *const _ as usize,
+            memory_start: &_memory_start as *const _ as usize,
+            stack_start: &_stack_start as *const _ as usize,
+            stack_end: &_stack_end as *const _ as usize,
+            heap_start: &_heap_start as *const _ as usize,
+            heap_size: &_heap_size as *const _ as usize,
+            memory_end: &_memory_end as *const _ as usize,
+            trap_vector: &asm_trap_vector as *const _ as usize,
         }
     }
     /// Provides a static singleton of the layout
@@ -80,49 +81,4 @@ impl StaticLayout {
             LAYOUT.as_ref().unwrap()
         }
     }
-}
-
-use crate::{print, print_title, println};
-
-pub fn layout_sanity_check() {
-    print_title!("Static Layout Sanity Check");
-    let l = StaticLayout::get();
-    println!(
-        "text:\t{:x} - {:x}\t{}-bytes",
-        l.text_start,
-        l.text_end,
-        l.text_end - l.text_start
-    );
-    println!(" trap:\t{:x} - {:x}??", l.trap_start, l.text_end);
-    println!("global:\t{:x}", l.global_pointer);
-    println!(
-        "rodata:\t{:x} - {:x}\t{}-bytes",
-        l.rodata_start,
-        l.rodata_end,
-        l.rodata_end - l.rodata_start
-    );
-    println!(
-        "data:\t{:x} - {:x}\t{}-bytes",
-        l.data_start,
-        l.data_end,
-        l.data_end - l.data_start
-    );
-    println!(
-        "bss:\t{:x} - {:x}\t{}-bytes",
-        l.bss_start,
-        l.bss_end,
-        l.bss_end - l.bss_start
-    );
-    println!(
-        " stack:\t{:x} - {:x}\t{}-bytes",
-        l.stack_start,
-        l.stack_end,
-        l.stack_end - l.stack_start
-    );
-    println!(
-        " heap:\t{:x} - {:x}\t{}-bytes",
-        l.heap_start,
-        l.heap_start + l.heap_size,
-        l.heap_size
-    );
 }

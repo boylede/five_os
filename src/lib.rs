@@ -15,10 +15,8 @@ extern crate std;
 extern crate test;
 
 pub mod console;
-pub mod kmem;
 pub mod layout;
 pub mod logo;
-pub mod memory;
 pub mod process;
 pub mod trap;
 
