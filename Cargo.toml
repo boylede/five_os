@@ -1,15 +1,20 @@
+[workspace]
+members = [
+  "crates/*",
+]
+resolver = "2"
+
+[profile.release]
+codegen-units = 1
+debug = false
+lto = true
+
 [package]
 name = "five_os"
 version = "0.2.0"
 authors = ["Daniel Boyle <boylede+github@gmail.com>"]
 readme = "readme.md"
 edition = "2021"
-
-
-[workspace]
-members = [
-  "crates/*",
-]
 
 [dependencies]
 fiveos_riscv = {path="crates/fiveos_riscv"}
@@ -20,11 +25,6 @@ fiveos_allocator = {path="crates/fiveos_allocator"}
 name = "five_os"
 test = false
 bench = false
-
-[profile.release]
-codegen-units = 1
-debug = false
-lto = true
 
 [build-dependencies]
 cc = "1.0.46"
