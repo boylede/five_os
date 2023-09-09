@@ -19,6 +19,7 @@ pub mod layout;
 pub mod logo;
 pub mod process;
 pub mod trap;
+pub mod assembly;
 
 #[no_mangle]
 extern "C" fn eh_personality() {}
