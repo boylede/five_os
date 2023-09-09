@@ -1,6 +1,8 @@
 use core::num::NonZeroU32;
 
-pub const PLIC_BASE_ADDRESS: usize = 0x0c00_0000;
+pub const PLIC_BASE_ADDRESS: usize = 0x0c00_0000; // 0x20_0000
+pub const PLIC_SIZE: usize = 0x2000; //0x20_0000 + (4 * 0x1000); // note: size is 0x1000 * num_cpus, going with 4 here due to my config
+pub const PLIC_END_ADDRESS: usize = PLIC_BASE_ADDRESS + PLIC_SIZE;
 const ENABLE: usize = 0x0c00_2000;
 const PRIORITY: usize = 0x0c00_0000;
 const PENDING: usize = 0x0c00_1000;
