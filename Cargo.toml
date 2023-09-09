@@ -8,23 +8,3 @@ resolver = "2"
 codegen-units = 1
 debug = false
 lto = true
-
-[package]
-name = "five_os"
-version = "0.2.0"
-authors = ["Daniel Boyle <boylede+github@gmail.com>"]
-readme = "readme.md"
-edition = "2021"
-
-[dependencies]
-fiveos_riscv = {path="crates/fiveos_riscv"}
-fiveos_virtio = {path="crates/fiveos_virtio"}
-fiveos_allocator = {path="crates/fiveos_allocator"}
-
-[[bin]]
-name = "five_os"
-test = false
-bench = false
-
-[build-dependencies]
-cc = "1.0.46"

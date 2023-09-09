@@ -14,12 +14,12 @@ extern crate std;
 #[cfg(test)]
 extern crate test;
 
+pub mod assembly;
 pub mod console;
 pub mod layout;
 pub mod logo;
 pub mod process;
 pub mod trap;
-pub mod assembly;
 
 #[no_mangle]
 extern "C" fn eh_personality() {}
@@ -37,4 +37,10 @@ pub extern "C" fn abort() -> ! {
     loop {
         atomic::compiler_fence(Ordering::SeqCst);
     }
+}
+
+pub trait Kernel {
+    fn alloc(&mut self, count: usize) -> *mut u8;
+    fn dealloc(&mut self, ptr: *mut u8);
+    fn zalloc(&mut self, count: usize) -> *mut u8;
 }

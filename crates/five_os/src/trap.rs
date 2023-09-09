@@ -113,10 +113,11 @@ extern "C" fn rust_trap(
     if cause.is_async() {
         match cause_number {
             3 => {
-                println!("Machine software interrupt: #{}", hart);
+                println!("Machine software interrupt: core#{}", hart);
             }
             7 => {
-                println!("Machine timer interrupt: #{}", hart);
+                // println!("Machine timer interrupt: core#{}", hart);
+                // do nothing for the moment
             }
             11 => {
                 if let Some(interrupt) = PLIC.claim() {
@@ -143,11 +144,11 @@ extern "C" fn rust_trap(
                     }
                     PLIC.complete(interrupt);
                 } else {
-                    println!("Machine external interrupt: #{}", hart);
+                    println!("Machine external interrupt: core#{}", hart);
                 }
             }
             _ => {
-                panic!("Unhandled async trap: #{} -> {}\n", hart, cause_number);
+                panic!("Unhandled async trap: core#{} -> {}\n", hart, cause_number);
             }
         }
     } else {
