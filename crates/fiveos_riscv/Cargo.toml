@@ -5,3 +5,4 @@ authors = ["Daniel Boyle <boylede+github@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+volatile = "0.4.5"
