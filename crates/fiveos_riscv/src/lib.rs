@@ -7,5 +7,6 @@
     const_mut_refs
 )]
 
+pub mod address;
 pub mod cpu;
 pub mod mmu;
