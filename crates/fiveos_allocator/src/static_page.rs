@@ -2,10 +2,8 @@ use core::assert;
 use core::mem::size_of;
 
 use crate::page::bitmap::PageMarker;
-// use fiveos_riscv::mmu::page_table::PAGE_SIZE;
-// use fiveos_riscv::mmu::{align_address_to_page, Page};
 
-pub struct PageContents(core::sync::atomic::AtomicU8);
+struct PageContents(core::sync::atomic::AtomicU8);
 
 /// an array of L bytes, intended to represent a page of memory.
 pub struct Page<const L: usize>([u8; L]);
