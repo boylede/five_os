@@ -3,6 +3,7 @@ extern crate alloc;
 use core::alloc::{GlobalAlloc, Layout};
 use core::mem::size_of;
 use core::ptr::null_mut;
+
 /// An AllocList stores the size and status of the following sequence of bytes
 /// another AllocList can be expected at alloc_list.add(size) bytes later;
 /// these will be placed in allocated pages to subdvide them into memory regions
@@ -133,8 +134,10 @@ impl<const P: usize> BumpPointerAlloc<P> {
             while head < tail {
                 let next = (head as *mut u8).add((*head).get_size()) as *mut AllocList;
                 if (*head).get_size() == 0 {
+                    todo!();
                     break;
                 } else if next >= tail {
+                    todo!();
                     break;
                 } else if (*head).is_free() && (*next).is_free() {
                     (*head).set_size((*head).get_size() + (*next).get_size());
@@ -144,8 +147,6 @@ impl<const P: usize> BumpPointerAlloc<P> {
         }
     }
 }
-
-
 
 /// rounds the address up to the next aligned value. if the value is already aligned, it is unchanged.
 /// alignment is such that address % alignment == 0;

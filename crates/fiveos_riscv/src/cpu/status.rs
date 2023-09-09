@@ -64,7 +64,25 @@ impl Misa {
         if misa == 0 {
             None
         } else {
-            let xlen = unsafe { asm_read_misa_xlen() } as u8;
+            let xlen = unsafe {
+                //     let xlen: usize;
+                //     asm!("
+                //     bltz {misa}, 1f
+                //     li {xlen}, 32
+                //     ret
+
+                // 1:
+
+                //     srli a0, a0, 1
+                //     bltz a0, 2f
+                //     li a0, 64
+                //     ret
+                // 2:
+                //     li a0, 128
+                //     ret", misa=in(reg) misa, xlen=out(reg) xlen);
+                asm_read_misa_xlen()
+                // xlen
+            } as u8;
             let extensions = (misa & Self::EXTENSION_MASK) as u32;
 
             Some(Misa { xlen, extensions })
@@ -142,13 +160,11 @@ impl Satp {
     pub fn from_raw(raw: usize) -> Satp {
         Satp(raw)
     }
-}
-
-pub fn get_satp() -> Satp {
-    let satp = unsafe { asm_get_satp() };
-    Satp(satp)
-}
-
-pub fn set_satp(satp: &Satp) {
-    unsafe { asm_set_satp(satp.raw()) }
+    pub fn get_satp() -> Satp {
+        let satp = unsafe { asm_get_satp() };
+        Satp(satp)
+    }
+    pub fn set_satp(satp: &Satp) {
+        unsafe { asm_set_satp(satp.raw()) }
+    }
 }

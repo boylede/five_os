@@ -2,11 +2,13 @@
 use core::fmt::{Error, Write};
 
 pub struct Uart<const B: usize> {
+    // base_address: *mut u8,
 }
 
 impl<const B: usize> Uart<B> {
     pub fn new() -> Self {
-        Uart {  }
+        // let base_address = base_address as *mut u8;
+        Uart {}
     }
     pub fn put(&mut self, c: u8) {
         unsafe {

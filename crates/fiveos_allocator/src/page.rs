@@ -3,18 +3,13 @@ use core::mem::size_of;
 
 pub mod bitmap;
 use bitmap::PageMarker;
-// use fiveos_riscv::mmu::page_table::PAGE_SIZE;
-// use fiveos_riscv::mmu::{align_address_to_page, Page};
 
 pub struct PageContents(core::sync::atomic::AtomicU8);
 
 /// an array of L bytes, intended to represent a page of memory.
 pub struct Page<const L: usize>([u8; L]);
 
-/// a page-based allocator
-/// Safety: this will access the underlying memory directly and dereference within the given range
-/// ((end - start) / alignment ) - (align(start,alignment)-start) should be greater than 0, e.g. there should be atleast 1 allocatable
-/// page after using the space starting at S as a bitmap indicating which pages are used.
+/// a page-based allocator, const A is the alignment and size of a page
 pub struct PageAllocator<const A: usize> {
     head: usize,
     tail: usize,
@@ -25,6 +20,10 @@ impl<const A: usize> PageAllocator<A> {
     pub const fn uninitalized() -> PageAllocator<A> {
         PageAllocator { head: 0, tail: 0 }
     }
+    /// # Safety
+    /// This will access the underlying memory directly and dereference within the given range
+    /// ((end - start) / alignment ) - (align(start,alignment)-start) should be greater than 0, e.g. there should be atleast 1 allocatable
+    /// page after using the space starting at S as a bitmap indicating which pages are used.
     pub unsafe fn new(head: usize, tail: usize) -> PageAllocator<A> {
         let mut this = PageAllocator { head, tail };
         this.clear_bitmap();
