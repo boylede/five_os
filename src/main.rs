@@ -2,11 +2,10 @@
 #![no_main]
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
 extern crate alloc;
+use alloc::{boxed::Box, string::String, vec};
 use core::{arch::asm, ptr::null_mut};
 
-use alloc::{boxed::Box, string::String, vec};
 use five_os::{trap::TrapFrame, *};
-
 use fiveos_allocator::{
     byte::{AllocList, BumpPointerAlloc},
     page::{bitmap::PageMarker, Page, PageAllocator},
@@ -28,17 +27,17 @@ use fiveos_riscv::{
         set_translation_table, EntryFlags, TableTypes,
     },
 };
-use fiveos_virtio::plic::PLIC;
+use fiveos_virtio::{
+    clint::{CLINT_BASE_ADDRESS, CLINT_END_ADDRESS},
+    plic::{PLIC, PLIC_BASE_ADDRESS, PLIC_END_ADDRESS},
+    uart::{UART_BASE_ADDRESS, UART_END_ADDRESS},
+};
+
 use layout::StaticLayout;
 
 // todo: improve how we initialize these statics
 #[global_allocator]
 static mut KERNEL_HEAP: BumpPointerAlloc<PAGE_SIZE> = BumpPointerAlloc::new(0, 0);
-
-#[alloc_error_handler]
-fn on_oom(_layout: core::alloc::Layout) -> ! {
-    panic!("OOM");
-}
 
 // todo: improve how we initialize these statics
 static mut KERNEL_PAGE_ALLOCATOR: PageAllocator<PAGE_SIZE> = PageAllocator::uninitalized();
@@ -65,10 +64,15 @@ pub unsafe fn get_global_descriptor() -> &'static PageTableDescriptor {
     }
 }
 
+#[alloc_error_handler]
+fn on_oom(_layout: core::alloc::Layout) -> ! {
+    panic!("OOM");
+}
+
 /// Our first entry point out of the assembly boot.s
 #[no_mangle]
 extern "C" fn kinit() {
-    cpu::uart::Uart::default().init();
+    cpu::uart::Uart::<UART_BASE_ADDRESS>::new().init();
     logo::print_logo();
     print_cpu_info();
 
@@ -76,43 +80,132 @@ extern "C" fn kinit() {
     layout_sanity_check(layout);
 
     // Setup the kernel's page table to keep track of allocations.
-    unsafe {
-        print_title!("Setup Memory Allocation");
+    let page_allocator;
+    {
         let layout = StaticLayout::get();
-        KERNEL_PAGE_ALLOCATOR = PageAllocator::new(layout.heap_start, layout.memory_end);
-
-        let count = KERNEL_PAGE_ALLOCATOR.page_count();
+        let count;
+        let alloc_table_start;
+        let alloc_table_end;
+        unsafe {
+            KERNEL_PAGE_ALLOCATOR = PageAllocator::new(layout.heap_start, layout.memory_end);
+            page_allocator = &mut KERNEL_PAGE_ALLOCATOR;
+            count = KERNEL_PAGE_ALLOCATOR.page_count();
+            alloc_table_end = layout.heap_start + count * core::mem::size_of::<PageMarker>();
+            alloc_table_start = align_to(alloc_table_end, PAGE_SIZE);
+            ALLOC_START = alloc_table_start;
+        }
+        print_title!("Setup Memory Allocation");
         println!("{} pages x {}-bytes", count, PAGE_SIZE);
-
-        let end_of_allocation_table =
-            layout.heap_start + count * core::mem::size_of::<PageMarker>();
         println!(
             "Allocation Table: {:x} - {:x}",
-            layout.heap_start, end_of_allocation_table
+            layout.heap_start, alloc_table_end
         );
-
-        let alloc_start = align_to(end_of_allocation_table, PAGE_SIZE);
-        ALLOC_START = alloc_start;
         println!(
             "Usable Pages: {:x} - {:x}",
-            alloc_start,
-            alloc_start + count * PAGE_SIZE
+            alloc_table_start,
+            alloc_table_start + count * PAGE_SIZE
         );
     }
-    let page_allocator = unsafe { &mut KERNEL_PAGE_ALLOCATOR };
+    // allocate some space to store a stack for the trap
+    let trap_stack = page_allocator
+        .zalloc(1)
+        .expect("failed to initialize trap stack") as *mut u8 as usize;
+
+    let mut kernel_memory_map: [(&str, usize, usize, EntryFlags); 16] = [
+        ("", 0, 0, EntryFlags::READ),
+        ("", 0, 0, EntryFlags::READ),
+        (
+            "Allocation Bitmap",
+            layout.heap_start,
+            layout.heap_start + (layout.heap_size / PAGE_SIZE),
+            EntryFlags::READ_EXECUTE,
+        ),
+        (
+            "Kernel Code Section",
+            layout.text_start,
+            layout.text_end,
+            EntryFlags::READ_EXECUTE,
+        ),
+        (
+            "Readonly Data Section",
+            layout.rodata_start,
+            layout.rodata_end,
+            EntryFlags::READ_EXECUTE,
+        ),
+        (
+            "Data Section",
+            layout.data_start,
+            layout.data_end,
+            EntryFlags::READ_WRITE,
+        ),
+        (
+            "BSS section",
+            layout.bss_start,
+            layout.bss_end,
+            EntryFlags::READ_WRITE,
+        ),
+        (
+            "Kernel Stack",
+            layout.stack_start,
+            layout.stack_end,
+            EntryFlags::READ_WRITE,
+        ),
+        (
+            "Hardware UART",
+            UART_BASE_ADDRESS,
+            UART_END_ADDRESS,
+            EntryFlags::READ_WRITE,
+        ),
+        (
+            "Hardware CLINT, MSIP",
+            CLINT_BASE_ADDRESS,
+            CLINT_END_ADDRESS,
+            EntryFlags::READ_WRITE,
+        ),
+        (
+            "Hardware PLIC",
+            PLIC_BASE_ADDRESS,
+            PLIC_END_ADDRESS,
+            EntryFlags::READ_WRITE,
+        ),
+        (
+            "Hardware ????",
+            0x0c20_0000,
+            0x0c20_8000,
+            EntryFlags::READ_WRITE,
+        ),
+        (
+            "Trap stack",
+            trap_stack,
+            trap_stack + PAGE_SIZE,
+            EntryFlags::READ_WRITE,
+        ),
+        ("", 0, 0, EntryFlags::READ),
+        ("", 0, 0, EntryFlags::READ),
+        ("", 0, 0, EntryFlags::READ),
+    ];
+
     // allocate pages for kernel memory, initialize bumplist/skiplist allocator
     // allocate page for kernel's page table
     unsafe {
         let k_alloc = page_allocator.zalloc(KMEM_SIZE).unwrap();
         let k_alloc_end = (k_alloc as *mut usize as usize) + (KMEM_SIZE * PAGE_SIZE);
-        // assert!(!k_alloc.is_null());
         KMEM_HEAD = k_alloc as *mut Page<PAGE_SIZE> as *mut AllocList;
         let kmem = KMEM_HEAD.as_mut().unwrap();
         kmem.set_free();
         kmem.set_size(KMEM_SIZE * PAGE_SIZE);
         KMEM_PAGE_TABLE = page_allocator.zalloc(1).unwrap() as *mut PageTableUntyped;
-        // KMEM_PAGE_TABLE.initialize();
         KERNEL_HEAP = BumpPointerAlloc::new(k_alloc as *mut usize as usize, k_alloc_end);
+
+        {
+            let kpt = KMEM_PAGE_TABLE as *const _ as usize;
+            kernel_memory_map[0] = ("Kernel Root Page Table", kpt, kpt, EntryFlags::READ_WRITE);
+        }
+        {
+            let start = kmem as *mut _ as usize;
+            let end = start + KMEM_SIZE * PAGE_SIZE;
+            kernel_memory_map[1] = ("Kernel Dynamic Memory", start, end, EntryFlags::READ_WRITE);
+        }
     }
 
     let kernel_page_table = unsafe { KMEM_PAGE_TABLE.as_mut().unwrap() };
@@ -120,193 +213,12 @@ extern "C" fn kinit() {
         panic!("address translation not supported on this processor.");
     }
 
-    print_title!("Kernel Space Identity Map");
-    let descriptor = unsafe { get_global_descriptor() };
-    let mut kernel_zalloc =
-        |count: usize| -> Option<*mut u8> { page_allocator.zalloc(count).map(|p| p as *mut u8) };
-    {
-        // map kernel page table
-        let kpt = kernel_page_table as *const PageTableUntyped as usize;
-        println!("Kernel root page table: {:x}", kpt);
-
-        kernel_page_table.identity_map(
-            descriptor,
-            kpt,
-            kpt,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map kernel's dynamic memory
-        let kernel_heap = unsafe { KMEM_HEAD as usize };
-        let page_count = unsafe { KMEM_SIZE };
-        let end = kernel_heap + page_count * PAGE_SIZE;
-        println!("Dynamic Memory: {:x} -> {:x}  RW", kernel_heap, end);
-        kernel_page_table.identity_map(
-            descriptor,
-            kernel_heap,
-            end,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map allocation 'bitmap'
-        let page_count = layout.heap_size / PAGE_SIZE;
-        println!(
-            "Allocation bitmap: {:x} -> {:x}  RE",
-            layout.heap_start,
-            layout.heap_start + page_count
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            layout.heap_start,
-            layout.heap_start + page_count,
-            EntryFlags::READ_EXECUTE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map kernel code
-        println!(
-            "Kernel code section: {:x} -> {:x}  RE",
-            layout.text_start, layout.text_end
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            layout.text_start,
-            layout.text_end,
-            EntryFlags::READ_EXECUTE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map rodata
-        println!(
-            "Readonly data section: {:x} -> {:x}  RE",
-            layout.rodata_start, layout.rodata_end
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            layout.rodata_start,
-            layout.rodata_end,
-            // probably overlaps with text, so keep execute bit on
-            EntryFlags::READ_EXECUTE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map data
-        println!(
-            "Data section: {:x} -> {:x}  RW",
-            layout.data_start, layout.data_end
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            layout.data_start,
-            layout.data_end,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map bss
-        println!(
-            "BSS section: {:x} -> {:x}  RW",
-            layout.bss_start, layout.bss_end
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            layout.bss_start,
-            layout.bss_end,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map kernel stack
-        println!(
-            "Kernel stack: {:x} -> {:x}  RW",
-            layout.stack_start, layout.stack_end
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            layout.stack_start,
-            layout.stack_end,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map UART
-        let mm_hardware_start = 0x1000_0000;
-        let mm_hardware_end = 0x1000_0100;
-        println!(
-            "Hardware UART: {:x} -> {:x}  RW",
-            mm_hardware_start, mm_hardware_end
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            mm_hardware_start,
-            mm_hardware_end,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map CLINT, MSIP
-        let mm_hardware_start = 0x0200_0000;
-        let mm_hardware_end = 0x0200_ffff;
-        println!(
-            "Hardware CLINT, MSIP: {:x} -> {:x}  RW",
-            mm_hardware_start, mm_hardware_end
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            mm_hardware_start,
-            mm_hardware_end,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map PLIC
-        let mm_hardware_start = 0x0c00_0000;
-        let mm_hardware_end = 0x0c00_2000;
-        println!(
-            "Hardware PLIC: {:x} -> {:x}  RW",
-            mm_hardware_start, mm_hardware_end
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            mm_hardware_start,
-            mm_hardware_end,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-    {
-        // map ???
-        let mm_hardware_start = 0x0c20_0000;
-        let mm_hardware_end = 0x0c20_8000;
-        println!(
-            "Hardware ???: {:x} -> {:x}  RW",
-            mm_hardware_start, mm_hardware_end
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            mm_hardware_start,
-            mm_hardware_end,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-
     // set up mmu satp value; todo: do this elsewhere / via zst interface
     let root_ppn = (kernel_page_table as *const _ as usize) >> 12;
     let satp_val = 8 << 60 | root_ppn;
-
+    let descriptor = unsafe { get_global_descriptor() };
+    let mut kernel_zalloc =
+        |count: usize| -> Option<*mut u8> { page_allocator.zalloc(count).map(|p| p as *mut u8) };
     {
         // reserve some space for trap frames
         // and put the address in mscratch
@@ -314,19 +226,6 @@ extern "C" fn kinit() {
         // to be used in trap.s
 
         // get a page for the trap stack frame
-        let trap_stack = kernel_zalloc(1).expect("failed to initialize trap stack") as usize;
-        println!(
-            "Trap stack: {:x} -> {:x}  RW",
-            trap_stack,
-            trap_stack + PAGE_SIZE
-        );
-        kernel_page_table.identity_map(
-            descriptor,
-            trap_stack,
-            trap_stack + PAGE_SIZE,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
 
         let global_trapframe_address = unsafe {
             let frame: &mut TrapFrame = &mut trap::GLOBAL_TRAPFRAMES[0];
@@ -346,6 +245,15 @@ extern "C" fn kinit() {
             EntryFlags::READ_WRITE,
             &mut kernel_zalloc,
         );
+    }
+
+    print_title!("Kernel Space Identity Map");
+
+    for (msg, start, end, flags) in kernel_memory_map {
+        if msg.len() > 0 {
+            println!("{}: 0x{:x}-0x{:x} {:?}", msg, start, end, flags);
+            kernel_page_table.identity_map(descriptor, start, end, flags, &mut kernel_zalloc);
+        }
     }
 
     print_mem_bitmap();
@@ -429,59 +337,14 @@ pub fn inspect_trap_vector() {
 
 pub fn print_page_table_untyped(table: &PageTableUntyped) {
     let descriptor = unsafe { get_global_descriptor() };
-    inner_print_map(table, descriptor, 0, 0);
-}
-
-fn inner_print_map(
-    table: &PageTableUntyped,
-    descriptor: &PageTableDescriptor,
-    base_address: usize,
-    descent: usize,
-) {
-    let max_bits = descriptor.virtual_address_size();
-    let bits_known: usize = descriptor
-        .virtual_segments
-        .iter()
-        .take(descent + 1)
-        .map(|(bits, _)| *bits)
-        .sum();
-    let bits_unknown = max_bits - bits_known;
-    let page_size = 1 << bits_unknown;
-    println!(
-        "Reading pagetable located at 0x{:x}:",
-        table as *const PageTableUntyped as usize
-    );
-
-    for index in 0..descriptor.size / descriptor.entry_size {
-        let resulting_address = base_address + (index * page_size);
-        let entry = (table.entry(index, descriptor.entry_size), descriptor);
-        if entry.extract_flags().is_valid() {
-            println!(
-                "{}-{}: 0x{:x}-0x{:x}: {:?}",
-                descent,
-                index,
-                resulting_address,
-                resulting_address + page_size - 1,
-                entry.0
-            );
-            if entry.extract_flags().is_branch() {
-                let next = entry.address();
-                let next_table = unsafe { (next as *const PageTableUntyped).as_ref().unwrap() };
-
-                inner_print_map(next_table, descriptor, resulting_address, descent + 1);
-            }
-        }
-    }
+    println!("{}", table.into_dynamic_typed(&descriptor));
 }
 
 pub fn print_misa_info() {
     printhdr!("Machine Instruction Set Architecture");
     let misa = Misa::get();
     let Some(misa) = misa else {
-        println!(
-            "ERROR: MISA reported unexpected value 0x{:?}",
-            misa
-        );
+        println!("ERROR: MISA reported unexpected value 0x{:?}", misa);
         return;
     };
 
