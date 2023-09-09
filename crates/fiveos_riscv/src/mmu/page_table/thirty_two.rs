@@ -1,4 +1,4 @@
-use super::descriptor::{BitGroup, PageTableDescriptor};
+use super::descriptor::{BitGroup, PageTableDescriptor, PageTableKind};
 
 pub const SV_THIRTY_TWO: PageTableDescriptor = PageTableDescriptor {
     size: PAGESIZE,
@@ -30,3 +30,32 @@ const PPN_SEGMENTS: [BitGroup; LEVELS] = [(10, 10), (12, 20)];
 /// bits as (size, offset) where size is # of bits and offset is the bit address
 /// of the lowest bit in the group.
 const PA_SEGMENTS: [BitGroup; LEVELS] = [(10, 12), (12, 22)];
+
+/// ZST to tag Sv32-type page tables
+pub struct Sv32;
+
+impl PageTableKind for Sv32 {
+    fn size(&self) -> usize {
+        PAGESIZE
+    }
+
+    fn depth(&self) -> usize {
+        LEVELS
+    }
+
+    fn entry_size(&self) -> usize {
+        PTESIZE
+    }
+
+    fn entry_segments(&self) -> &[BitGroup] {
+        &PPN_SEGMENTS
+    }
+
+    fn physical_segments(&self) -> &[BitGroup] {
+        &PA_SEGMENTS
+    }
+
+    fn virtual_segments(&self) -> &[BitGroup] {
+        &VPN_SEGMENTS
+    }
+}

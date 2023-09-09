@@ -1,3 +1,15 @@
+/// describes the structure of a page table, for use in generic functions that may want to walk
+/// page tables or create them, either with monomorphized generics or through
+/// a PageTableDescriptor input at runtime
+pub trait PageTableKind {
+    fn size(&self) -> usize;
+    fn depth(&self) -> usize;
+    fn entry_size(&self) -> usize;
+    fn entry_segments(&self) -> &[BitGroup];
+    fn physical_segments(&self) -> &[BitGroup];
+    fn virtual_segments(&self) -> &[BitGroup];
+}
+
 pub struct PageTableDescriptor {
     /// the size of the page table, in bytes (always 4096)
     pub size: usize,
@@ -19,6 +31,27 @@ impl PageTableDescriptor {
     }
     pub fn physical_address_size(&self) -> usize {
         collapse(self.physical_segments).0 + 12
+    }
+}
+
+impl PageTableKind for PageTableDescriptor {
+    fn size(&self) -> usize {
+        self.size
+    }
+    fn depth(&self) -> usize {
+        self.levels
+    }
+    fn entry_size(&self) -> usize {
+        self.entry_size
+    }
+    fn entry_segments(&self) -> &[BitGroup] {
+        self.page_segments
+    }
+    fn physical_segments(&self) -> &[BitGroup] {
+        self.physical_segments
+    }
+    fn virtual_segments(&self) -> &[BitGroup] {
+        self.virtual_segments
     }
 }
 
