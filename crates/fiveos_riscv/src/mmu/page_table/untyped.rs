@@ -12,6 +12,8 @@ use super::{descriptor::PageTableDescriptor, PAGE_ADDR_MASK, PAGE_SIZE};
 
 pub mod entry;
 
+pub struct PageTableDynamicTyped<'a, 'b>(pub &'a PageTableUntyped, pub &'b PageTableDescriptor);
+
 /// Abstraction over any MMU-backed page table type
 #[repr(transparent)]
 pub struct PageTableUntyped {
@@ -29,6 +31,9 @@ impl PageTableUntyped {
         let address = (self as *mut PageTableUntyped) as usize + (index * size);
         // unsafe { GenericPageTableEntry::at_address_mut(address) }
         unsafe { (address as *mut PageTableEntryUntyped).as_mut().unwrap() }
+    }
+    pub fn into_dynamic_typed<'a, 'b>(&'a self, descriptor: &'b PageTableDescriptor) -> PageTableDynamicTyped<'a,'b> {
+        PageTableDynamicTyped(&self, &descriptor)
     }
     pub fn map(
         &mut self,

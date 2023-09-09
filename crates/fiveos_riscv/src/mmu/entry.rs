@@ -1,3 +1,7 @@
+use core::fmt::Debug;
+
+use super::page_table::forty_eight::Entry;
+
 /// testing out a trait-based interface to the page table entries
 pub trait PTEntryRead {
     /// copy the flags out of the entry for inspection
@@ -197,4 +201,23 @@ impl EntryFlags {
     pub const READ_WRITE: EntryFlags = EntryFlags::READ.with_writable(true);
     pub const USER_READ_WRITE: EntryFlags = EntryFlags::READ_WRITE.with_user(true);
     pub const READ_EXECUTE: EntryFlags = EntryFlags::READ.with_executable(true);
+}
+
+impl Debug for EntryFlags {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self.is_readable() {
+            true => write!(f, "R")?,
+            false => write!(f, "-")?,
+        };
+        match self.is_writable() {
+            true => write!(f, "W")?,
+            false => write!(f, "-")?,
+        };
+        match self.is_executable() {
+            true => write!(f, "E")?,
+            false => write!(f, "-")?,
+        };
+        Ok(())
+        // f.debug_struct("EntryFlags").field("inner", &self.inner).finish()
+    }
 }
