@@ -2,7 +2,7 @@ use crate::mmu::entry::PTEntryRead;
 
 use super::{
     descriptor::PageTableDescriptor,
-    untyped::{PageTableUntyped, PageTableDynamicTyped},
+    untyped::{PageTableDynamicTyped, PageTableUntyped},
 };
 
 impl<'a, 'b> core::fmt::Display for PageTableDynamicTyped<'a, 'b> {
@@ -50,7 +50,7 @@ fn inner_print_map(
                 resulting_address + page_size - 1,
                 entry.0
             );
-            
+
             if entry.extract_flags().is_branch() {
                 let next = entry.address();
                 let next_table = unsafe { (next as *const PageTableUntyped).as_ref().unwrap() };

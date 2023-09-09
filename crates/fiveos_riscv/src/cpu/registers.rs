@@ -1,6 +1,7 @@
 pub mod misa;
-pub mod satp;
+pub mod mstatus;
 pub mod mtvec;
+pub mod satp;
 
 pub mod raw {
     extern "C" {

@@ -32,7 +32,10 @@ impl PageTableUntyped {
         // unsafe { GenericPageTableEntry::at_address_mut(address) }
         unsafe { (address as *mut PageTableEntryUntyped).as_mut().unwrap() }
     }
-    pub fn into_dynamic_typed<'a, 'b>(&'a self, descriptor: &'b PageTableDescriptor) -> PageTableDynamicTyped<'a,'b> {
+    pub fn into_dynamic_typed<'a, 'b>(
+        &'a self,
+        descriptor: &'b PageTableDescriptor,
+    ) -> PageTableDynamicTyped<'a, 'b> {
         PageTableDynamicTyped(&self, &descriptor)
     }
     pub fn map(

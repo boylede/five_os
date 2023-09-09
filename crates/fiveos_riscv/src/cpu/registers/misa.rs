@@ -2,7 +2,6 @@ use core::arch::asm;
 
 use super::raw::asm_read_misa_xlen;
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct Misa {
     xlen: u8,
@@ -13,7 +12,7 @@ impl Misa {
     pub const EXTENSION_NAMES: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     pub const EXTENSION_DESCRIPTIONS: [&str; 26] = [
         "Atomics (A)",
-        "Reserved (B)",
+        "Reserved (B)", // Bit-manipulation
         "Compressed (C)",
         "Double-precision floating point (D)",
         "Embedded base ISA (E)",
@@ -21,19 +20,19 @@ impl Misa {
         "Additional standards present (G)",
         "Hypervisor (H)",
         "Integer base ISA (I)",
-        "Reserved (J)",
+        "Reserved (J)", // dynamically translated languages
         "Reserved (K)",
         "Reserved (L)",
         "Integer multiply & divide (M)",
-        "User-level interrupts (N)",
+        "User-level interrupts (N)", // user-level interrupts
         "Reserved (O)",
-        "Reserved (P)",
+        "Reserved (P)", // packed-simd
         "Quad precision floating point (Q)",
         "Reserved (R)",
         "Supervisor Mode (S)",
         "Reserved (T)",
         "User Mode (U)",
-        "Reserved (V)",
+        "Reserved (V)", // vector
         "Reserved (W)",
         "Nonstandard extensions present (X)",
         "Reserved (Y)",

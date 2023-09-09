@@ -2,7 +2,10 @@ use core::arch::asm;
 
 use crate::mmu::align_address_to_page;
 
-use super::{misa::Misa, raw::{asm_set_satp, asm_get_satp}};
+use super::{
+    misa::Misa,
+    raw::{asm_get_satp, asm_set_satp},
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Satp(usize);
