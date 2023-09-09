@@ -1,4 +1,4 @@
-use crate::cpu::status::Satp;
+use crate::cpu::registers::satp::Satp;
 
 use self::page_table::descriptor::PageTableDescriptor;
 use self::page_table::untyped::PageTableUntyped;

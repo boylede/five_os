@@ -1,2 +1,2 @@
-pub mod status;
+pub mod registers;
 pub mod uart;

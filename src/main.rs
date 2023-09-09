@@ -13,9 +13,9 @@ use fiveos_allocator::{
 use fiveos_riscv::{
     cpu::{
         self,
-        status::{
-            asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_mtvec, asm_get_mvendorid, Misa,
-        },
+        registers::{misa::Misa, raw::{
+            asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_mtvec, asm_get_mvendorid,
+        }},
     },
     mmu::{
         entry::PTEntryRead,
@@ -258,6 +258,7 @@ extern "C" fn kinit() {
 
     print_mem_bitmap();
 
+    println!("[bookmark sigil] Leaving kinit");
     unsafe {
         asm!("csrw satp, {}", in(reg) satp_val);
         asm!("sfence.vma zero, {}", in(reg)0);
