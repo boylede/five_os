@@ -6,3 +6,5 @@ edition = "2021"
 
 [dependencies]
 volatile = "0.4.5"
+num_enum = {version="0.7.0", default-features = false}
+paste = "1.0"
