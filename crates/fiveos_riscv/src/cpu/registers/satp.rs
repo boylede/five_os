@@ -1,5 +1,3 @@
-use core::arch::asm;
-
 use crate::mmu::align_address_to_page;
 
 use super::{

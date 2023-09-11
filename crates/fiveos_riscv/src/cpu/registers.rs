@@ -16,6 +16,5 @@ pub mod raw {
         pub fn asm_get_mstatus() -> usize;
         pub fn asm_set_mstatus(_: usize);
         pub fn asm_get_mepc() -> usize;
-        pub fn asm_read_misa_xlen() -> usize;
     }
 }

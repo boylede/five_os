@@ -6,24 +6,6 @@ asm_get_misa:
     csrr   a0, misa
     ret
 
-.global asm_read_misa_xlen
-asm_read_misa_xlen:
-    csrr   a0, misa
-    # if a0 < 0
-    bltz a0, 1f
-    # so misa is > 0, meaning top bit is unset
-    li a0, 32
-    ret
-    # at this point both top bits are unset
-1:
-    # topmost bit set
-    srli a0, a0, 1
-    bltz a0, 2f
-    li a0, 64
-    ret
-2:
-    li a0, 128
-    ret
 .global asm_get_mvendorid
 asm_get_mvendorid:
     csrr   a0, mvendorid

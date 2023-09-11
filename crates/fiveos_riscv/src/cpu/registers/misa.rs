@@ -1,14 +1,30 @@
 use core::arch::asm;
 
-use super::raw::asm_read_misa_xlen;
+use num_enum::{FromPrimitive, IntoPrimitive};
 
+const EXTENSION_MASK: usize = (1 << 26) - 1;
+const XLEN: usize = core::mem::size_of::<usize>() * 8;
+const BASE: usize = 0b11 << (XLEN - 2);
+
+#[derive(Debug, Clone, Copy, FromPrimitive, IntoPrimitive)]
+#[repr(u8)]
+pub enum Architecture {
+    #[num_enum(default)]
+    Unknown = 0,
+    ThirtyTwo = 1,
+    SixtyFour = 2,
+    OneTwentyEight = 3,
+}
+
+/// The Machine Instruction Set Architecture register
 #[derive(Debug, Clone, Copy)]
 pub struct Misa {
-    xlen: u8,
+    base: Architecture,
     extensions: u32,
 }
 
 impl Misa {
+    pub const EXPECTED_XLEN: usize = XLEN;
     pub const EXTENSION_NAMES: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     pub const EXTENSION_DESCRIPTIONS: [&'static str; 26] = [
         "Atomics (A)",
@@ -38,7 +54,7 @@ impl Misa {
         "Reserved (Y)",
         "Reserved (Z)",
     ];
-    const EXTENSION_MASK: usize = (1 << 26) - 1;
+
     pub fn get() -> Option<Misa> {
         let misa = unsafe {
             let misa: usize;
@@ -48,32 +64,22 @@ impl Misa {
         if misa == 0 {
             None
         } else {
-            let xlen = unsafe {
-                //     let xlen: usize;
-                //     asm!("
-                //     bltz {misa}, 1f
-                //     li {xlen}, 32
-                //     ret
-
-                // 1:
-
-                //     srli a0, a0, 1
-                //     bltz a0, 2f
-                //     li a0, 64
-                //     ret
-                // 2:
-                //     li a0, 128
-                //     ret", misa=in(reg) misa, xlen=out(reg) xlen);
-                asm_read_misa_xlen()
-                // xlen
-            } as u8;
-            let extensions = (misa & Self::EXTENSION_MASK) as u32;
-
-            Some(Misa { xlen, extensions })
+            let base: Architecture = (((misa & BASE) >> (XLEN - 2)) as u8).into();
+            let extensions = (misa & EXTENSION_MASK) as u32;
+            Some(Misa { base, extensions })
         }
     }
-    pub fn xlen(&self) -> u8 {
-        self.xlen
+    pub fn base(&self) -> Architecture {
+        self.base
+    }
+    pub fn xlen(&self) -> usize {
+        use Architecture as A;
+        match self.base {
+            A::Unknown => unreachable!(),
+            A::ThirtyTwo => 32,
+            A::SixtyFour => 64,
+            A::OneTwentyEight => 128,
+        }
     }
     pub fn extensions(&self) -> u32 {
         self.extensions
