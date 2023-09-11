@@ -1,6 +1,5 @@
 ///! Access to the mstatus csr, based on The RISC-V Instruction Set Manual Vol II, Privileged Architecture Version 1.9
 
-
 use core::arch::asm;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use paste::paste;
@@ -52,7 +51,7 @@ macro_rules! enum_access {
 }
 
 /// ZST for accessing the MStatus register
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct MStatus {}
 
 impl MStatus {
@@ -116,6 +115,8 @@ pub enum VirtualMemoryMode {
     Sv64 = 12,
 }
 
+
+/// The mode that determines what access the CPU currently has
 #[derive(Debug, Eq, PartialEq, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum PrivilegeMode {
@@ -127,6 +128,8 @@ pub enum PrivilegeMode {
 }
 
 mod mask {
+    //! masks for the fields inside mstatus
+
     use core::mem::size_of;
     const XLEN: usize = size_of::<usize>() * 8;
 

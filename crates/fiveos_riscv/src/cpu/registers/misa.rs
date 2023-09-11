@@ -9,8 +9,8 @@ pub struct Misa {
 }
 
 impl Misa {
-    pub const EXTENSION_NAMES: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    pub const EXTENSION_DESCRIPTIONS: [&str; 26] = [
+    pub const EXTENSION_NAMES: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    pub const EXTENSION_DESCRIPTIONS: [&'static str; 26] = [
         "Atomics (A)",
         "Reserved (B)", // Bit-manipulation
         "Compressed (C)",
@@ -24,7 +24,7 @@ impl Misa {
         "Reserved (K)",
         "Reserved (L)",
         "Integer multiply & divide (M)",
-        "User-level interrupts (N)", // user-level interrupts
+        "User-level interrupts (N)",
         "Reserved (O)",
         "Reserved (P)", // packed-simd
         "Quad precision floating point (Q)",
