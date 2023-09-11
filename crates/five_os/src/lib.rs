@@ -7,6 +7,9 @@
     const_mut_refs
 )]
 
+use fiveos_peripherals::{println, print};
+use fiveos_virtio::uart::Uart0;
+
 // Allow testing this library
 #[cfg(test)]
 #[macro_use]
@@ -15,7 +18,6 @@ extern crate std;
 extern crate test;
 
 pub mod assembly;
-pub mod console;
 pub mod layout;
 pub mod logo;
 pub mod process;

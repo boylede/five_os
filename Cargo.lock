@@ -17,6 +17,7 @@ version = "0.2.0"
 dependencies = [
  "cc",
  "fiveos_allocator",
+ "fiveos_peripherals",
  "fiveos_riscv",
  "fiveos_virtio",
 ]
@@ -24,6 +25,13 @@ dependencies = [
 [[package]]
 name = "fiveos_allocator"
 version = "0.2.0"
+
+[[package]]
+name = "fiveos_peripherals"
+version = "0.0.1"
+dependencies = [
+ "fiveos_virtio",
+]
 
 [[package]]
 name = "fiveos_riscv"

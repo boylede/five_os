@@ -1,0 +1,8 @@
+[package]
+name = "fiveos_peripherals"
+version = "0.0.1"
+authors = ["Daniel Boyle <boylede@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+fiveos_virtio = {path="../fiveos_virtio"}

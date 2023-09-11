@@ -9,6 +9,7 @@ edition = "2021"
 fiveos_riscv = {path="../fiveos_riscv"}
 fiveos_virtio = {path="../fiveos_virtio"}
 fiveos_allocator = {path="../fiveos_allocator"}
+fiveos_peripherals = {path="../fiveos_peripherals"}
 
 [[bin]]
 name = "five_os"
