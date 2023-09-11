@@ -28,7 +28,8 @@ extern "C" fn eh_personality() {}
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    println!("aborting: {}", info);
+    let mut uart = unsafe {Uart0::new()};
+    println!(uart, "aborting: {}", info);
     abort();
 }
 

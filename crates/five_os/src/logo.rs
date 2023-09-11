@@ -1,3 +1,5 @@
+use core::fmt::Write;
+
 use crate::{print, println};
 
 const LOGO: &str = r"
@@ -7,6 +9,6 @@ const LOGO: &str = r"
                  /_/ /___/ |___/___/  \____/___/
 ";
 
-pub fn print_logo() {
-    println!("{}", LOGO);
+pub fn print_logo(mut writee: &mut impl Write) {
+    println!(writee, "{}", LOGO);
 }

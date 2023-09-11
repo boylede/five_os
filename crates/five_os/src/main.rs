@@ -3,7 +3,8 @@
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
 extern crate alloc;
 use alloc::{boxed::Box, string::String, vec};
-use core::{arch::asm, ptr::null_mut};
+use core::{arch::asm, fmt::Write, ptr::null_mut};
+use fiveos_peripherals::{print, print_title, printhdr, println};
 
 use five_os::{trap::TrapFrame, *};
 use fiveos_allocator::{
@@ -13,9 +14,12 @@ use fiveos_allocator::{
 use fiveos_riscv::{
     cpu::{
         self,
-        registers::{misa::Misa, raw::{
-            asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_mtvec, asm_get_mvendorid,
-        }},
+        registers::{
+            misa::Misa,
+            raw::{
+                asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_mtvec, asm_get_mvendorid,
+            },
+        },
     },
     mmu::{
         entry::PTEntryRead,
@@ -31,6 +35,7 @@ use fiveos_virtio::{
     clint::{CLINT_BASE_ADDRESS, CLINT_END_ADDRESS},
     plic::{PLIC, PLIC_BASE_ADDRESS, PLIC_END_ADDRESS},
     uart::{UART_BASE_ADDRESS, UART_END_ADDRESS},
+    Peripherals, PERIPHERALS,
 };
 
 use layout::StaticLayout;
@@ -72,12 +77,15 @@ fn on_oom(_layout: core::alloc::Layout) -> ! {
 /// Our first entry point out of the assembly boot.s
 #[no_mangle]
 extern "C" fn kinit() {
-    cpu::uart::Uart::<UART_BASE_ADDRESS>::new().init();
-    logo::print_logo();
-    print_cpu_info();
+    // safety: we only call this once
+    let Peripherals { mut uart } = unsafe { PERIPHERALS.take().unwrap_unchecked() };
+    uart.init();
+
+    logo::print_logo(&mut uart);
+    print_cpu_info(&mut uart);
 
     let layout = StaticLayout::get();
-    layout_sanity_check(layout);
+    layout_sanity_check(&mut uart, layout);
 
     // Setup the kernel's page table to keep track of allocations.
     let page_allocator;
@@ -94,13 +102,14 @@ extern "C" fn kinit() {
             alloc_table_start = align_to(alloc_table_end, PAGE_SIZE);
             ALLOC_START = alloc_table_start;
         }
-        print_title!("Setup Memory Allocation");
-        println!("{} pages x {}-bytes", count, PAGE_SIZE);
+        print_title!(uart, "Setup Memory Allocation");
+        println!(uart, "{} pages x {}-bytes", count, PAGE_SIZE);
         println!(
-            "Allocation Table: {:x} - {:x}",
-            layout.heap_start, alloc_table_end
+            uart,
+            "Allocation Table: {:x} - {:x}", layout.heap_start, alloc_table_end
         );
         println!(
+            uart,
             "Usable Pages: {:x} - {:x}",
             alloc_table_start,
             alloc_table_start + count * PAGE_SIZE
@@ -247,18 +256,19 @@ extern "C" fn kinit() {
         );
     }
 
-    print_title!("Kernel Space Identity Map");
+    print_title!(uart, "Kernel Space Identity Map");
 
     for (msg, start, end, flags) in kernel_memory_map {
         if msg.len() > 0 {
-            println!("{}: 0x{:x}-0x{:x} {:?}", msg, start, end, flags);
+            println!(uart, "{}: 0x{:x}-0x{:x} {:?}", msg, start, end, flags);
             kernel_page_table.identity_map(descriptor, start, end, flags, &mut kernel_zalloc);
         }
     }
 
-    print_mem_bitmap();
+    print_mem_bitmap(&mut uart);
 
-    println!("[bookmark sigil] Leaving kinit");
+    println!(uart, "[bookmark sigil] Leaving kinit");
+    kmain(&mut uart);
     unsafe {
         asm!("csrw satp, {}", in(reg) satp_val);
         asm!("sfence.vma zero, {}", in(reg)0);
@@ -266,105 +276,110 @@ extern "C" fn kinit() {
 }
 
 #[no_mangle]
-extern "C" fn kmain() {
-    print_title!("entering kmain");
+extern "C" fn kmain(mut uart: &mut impl Write) {
+    print_title!(uart, "entering kmain");
 
-    println!("setting up UART receiver");
+    println!(uart, "setting up UART receiver");
     PLIC.set_threshold(0);
     PLIC.enable_interrupt(10);
     PLIC.set_priority(10, 1);
 
     {
-        printhdr!("testing allocations ");
+        printhdr!(uart, "testing allocations ");
         let k = Box::<u32>::new(100);
-        println!("Boxed value = {}", &k);
+        println!(uart, "Boxed value = {}", &k);
         let sparkle_heart = vec![240, 159, 146, 150];
         let sparkle_heart = String::from_utf8(sparkle_heart).unwrap();
-        println!("String = {}", sparkle_heart);
-        println!("\n\nAllocations of a box, vector, and string");
-        kmem_print_table();
-        println!("test");
+        println!(uart, "String = {}", sparkle_heart);
+        println!(uart, "\n\nAllocations of a box, vector, and string");
+        kmem_print_table(uart);
+        println!(uart, "test");
     }
-    println!("test 2");
-    println!("\n\nEverything should now be free:");
-    kmem_print_table();
+    println!(uart, "test 2");
+    println!(uart, "\n\nEverything should now be free:");
+    kmem_print_table(uart);
 
-    printhdr!("reached end, looping");
+    printhdr!(uart, "reached end, looping");
     loop {}
 }
 
 #[no_mangle]
-extern "C" fn kinit_hart() {
-    println!("entering hart kinit");
-    abort();
+extern "C" fn kinit_hart() -> ! {
+    // println!("entering hart kinit");
+    loop {
+        unsafe { asm!("wfi") };
+    }
 }
 
 ////////////////////////////////////////////// todo: relocate below this line
-pub fn print_cpu_info() {
+pub fn print_cpu_info(mut uart: &mut impl Write) {
     let vendor = unsafe { asm_get_mvendorid() };
     let architecture = unsafe { asm_get_marchid() };
     let implementation = unsafe { asm_get_mimpid() };
-    print_title!("CPU INFO");
+    print_title!(uart, "CPU INFO");
     println!(
+        uart,
         "Vendor: {:x} | Architecture: {:x} | Implementation: {:x}",
-        vendor, architecture, implementation
+        vendor,
+        architecture,
+        implementation
     );
-    print_misa_info();
+    print_misa_info(uart);
 }
 
-pub fn print_trap_info() {
+pub fn print_trap_info(mut uart: &mut impl Write) {
     let mepc = unsafe { asm_get_mepc() };
-    println!("mepc: {:x}", mepc);
+    println!(uart, "mepc: {:x}", mepc);
     let mtvec = unsafe { asm_get_mtvec() };
-    println!("mtvec: {:x}", mtvec);
+    println!(uart, "mtvec: {:x}", mtvec);
 }
 
-pub fn inspect_trap_vector() {
-    printhdr!("Trap");
+pub fn inspect_trap_vector(mut uart: &mut impl Write) {
+    printhdr!(uart, "Trap");
     let mtvec = unsafe { asm_get_mtvec() };
     if mtvec == 0 {
-        println!("trap vector not initialized");
+        println!(uart, "trap vector not initialized");
         return;
     }
-    println!("trap vector: {:x}", mtvec);
+    println!(uart, "trap vector: {:x}", mtvec);
     match mtvec & 0b11 {
-        0b00 => println!("Direct Mode"),
-        0b01 => println!("Vectored Mode"),
-        0b10 => println!("Reserved Value 2 Set"),
-        0b11 => println!("Reserved Value 3 Set"),
+        0b00 => println!(uart, "Direct Mode"),
+        0b01 => println!(uart, "Vectored Mode"),
+        0b10 => println!(uart, "Reserved Value 2 Set"),
+        0b11 => println!(uart, "Reserved Value 3 Set"),
         _ => unreachable!(),
     };
 }
 
-pub fn print_page_table_untyped(table: &PageTableUntyped) {
+pub fn print_page_table_untyped(uart: &mut impl Write, table: &PageTableUntyped) {
     let descriptor = unsafe { get_global_descriptor() };
-    println!("{}", table.into_dynamic_typed(&descriptor));
+    println!(uart, "{}", table.into_dynamic_typed(&descriptor));
 }
 
-pub fn print_misa_info() {
-    printhdr!("Machine Instruction Set Architecture");
+pub fn print_misa_info(mut uart: &mut impl Write) {
+    printhdr!(uart, "Machine Instruction Set Architecture");
     let misa = Misa::get();
     let Some(misa) = misa else {
-        println!("ERROR: MISA reported unexpected value 0x{:?}", misa);
+        println!(uart, "ERROR: MISA reported unexpected value 0x{:?}", misa);
         return;
     };
 
-    println!("Reported base width: {}", misa.xlen());
+    println!(uart, "Reported base width: {}", misa.xlen());
 
     let extensions = misa.extensions();
-    print!("Extensions: ");
+    print!(uart, "Extensions: ");
     for (i, letter) in Misa::EXTENSION_NAMES.chars().enumerate() {
         let mask = 1 << i;
         if extensions & mask > 0 {
-            print!("{}", letter);
+            print!(uart, "{}", letter);
         }
     }
-    println!();
-    printhdr!("Extensions");
+    println!(uart,);
+    printhdr!(uart, "Extensions");
     for (i, desc) in Misa::EXTENSION_DESCRIPTIONS.iter().enumerate() {
         let mask = 1 << i;
         if extensions & mask > 0 {
-            println!("{}", desc);
+            println!(uart, "{}", desc);
         }
     }
 }
@@ -385,59 +400,65 @@ pub fn page_table() -> (&'static mut [PageMarker]) {
 }
 
 /// prints out the currently allocated pages
-pub fn print_mem_bitmap() {
-    print_title!("Allocator Bitmap");
+pub fn print_mem_bitmap(mut uart: &mut impl Write) {
+    print_title!(uart, "Allocator Bitmap");
     let page_table = page_table();
     let page_count = page_table.len();
     {
         let start = ((page_table as *const _) as *const PageMarker) as usize;
         let end = start + page_count * core::mem::size_of::<PageMarker>();
-        println!("Alloc Table:\t{:x} - {:x}", start, end);
+        println!(uart, "Alloc Table:\t{:x} - {:x}", start, end);
     }
     {
         let alloc_start = unsafe { ALLOC_START };
         let alloc_end = alloc_start + page_count * PAGE_SIZE;
-        println!("Usable Pages:\t{:x} - {:x}", alloc_start, alloc_end);
+        println!(uart, "Usable Pages:\t{:x} - {:x}", alloc_start, alloc_end);
     }
-    printhdr!();
+    printhdr!(uart,);
     let mut middle = false;
     let mut start = 0;
     for page in page_table.iter_mut() {
         if page.is_taken() {
             if !middle {
                 let page_address = alloc_table_entry_to_page_address(page);
-                print!("{:x} => ", page_address);
+                print!(uart, "{:x} => ", page_address);
                 middle = true;
                 start = page_address;
             }
             if page.is_last() {
                 let page_address = alloc_table_entry_to_page_address(page) + PAGE_SIZE - 1;
                 let size = (page_address - start) / PAGE_SIZE;
-                print!("{:x}: {} page(s).", page_address, size + 1);
-                println!("");
+                print!(uart, "{:x}: {} page(s).", page_address, size + 1);
+                println!(uart, "");
                 middle = false;
             }
         }
     }
-    printhdr!();
+    printhdr!(uart,);
     {
         let used = page_table.iter().filter(|page| page.is_taken()).count();
-        println!("Allocated pages: {} = {} bytes", used, used * PAGE_SIZE);
+        println!(
+            uart,
+            "Allocated pages: {} = {} bytes",
+            used,
+            used * PAGE_SIZE
+        );
         let free = page_count - used;
-        println!("Free pages: {} = {} bytes", free, free * PAGE_SIZE);
+        println!(uart, "Free pages: {} = {} bytes", free, free * PAGE_SIZE);
     }
 }
 
 /// prints the allocation table
-pub fn kmem_print_table() {
+pub fn kmem_print_table(mut uart: &mut impl Write) {
     unsafe {
         let mut head = KMEM_HEAD as *mut AllocList;
         let tail = (head).add(KMEM_SIZE) as *mut AllocList;
         while head < tail {
             {
-                println!("inspecting {:x}", head as *mut u8 as usize);
+                println!(uart, "inspecting {:x}", head as *mut u8 as usize);
                 let this = head.as_ref().unwrap();
                 println!(
+                    uart,
                     "{:p}: Length = {:<10} Taken = {}",
                     this,
                     this.get_size(),
@@ -445,11 +466,11 @@ pub fn kmem_print_table() {
                 );
             }
             let next = (head as *mut u8).add((*head).get_size());
-            println!("checking next: {:x}", next as usize);
+            println!(uart, "checking next: {:x}", next as usize);
             head = next as *mut AllocList;
         }
     }
-    println!("done printing alloc table");
+    println!(uart, "done printing alloc table");
 }
 
 /// rounds the address up to the next aligned value. if the value is already aligned, it is unchanged.
@@ -459,41 +480,47 @@ pub const fn align_to(address: usize, alignment: usize) -> usize {
     (address + mask) & !mask
 }
 
-pub fn layout_sanity_check(l: &StaticLayout) {
-    print_title!("Static Layout Sanity Check");
+pub fn layout_sanity_check(mut uart: &mut impl Write, l: &StaticLayout) {
+    print_title!(uart, "Static Layout Sanity Check");
     println!(
+        uart,
         "text:\t{:x} - {:x}\t{}-bytes",
         l.text_start,
         l.text_end,
         l.text_end - l.text_start
     );
-    println!(" trap:\t{:x} - {:x}??", l.trap_start, l.text_end);
-    println!("global:\t{:x}", l.global_pointer);
+    println!(uart, " trap:\t{:x} - {:x}??", l.trap_start, l.text_end);
+    println!(uart, "global:\t{:x}", l.global_pointer);
     println!(
+        uart,
         "rodata:\t{:x} - {:x}\t{}-bytes",
         l.rodata_start,
         l.rodata_end,
         l.rodata_end - l.rodata_start
     );
     println!(
+        uart,
         "data:\t{:x} - {:x}\t{}-bytes",
         l.data_start,
         l.data_end,
         l.data_end - l.data_start
     );
     println!(
+        uart,
         "bss:\t{:x} - {:x}\t{}-bytes",
         l.bss_start,
         l.bss_end,
         l.bss_end - l.bss_start
     );
     println!(
+        uart,
         " stack:\t{:x} - {:x}\t{}-bytes",
         l.stack_start,
         l.stack_end,
         l.stack_end - l.stack_start
     );
     println!(
+        uart,
         " heap:\t{:x} - {:x}\t{}-bytes",
         l.heap_start,
         l.heap_start + l.heap_size,

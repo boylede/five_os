@@ -1,14 +1,13 @@
 use core::ptr::null_mut;
-use fiveos_riscv::cpu::uart::Uart;
 use fiveos_virtio::plic::PLIC;
-use fiveos_virtio::uart::UART_BASE_ADDRESS;
+use fiveos_virtio::uart::{Uart, Uart0, UART_BASE_ADDRESS};
 
 use crate::layout::StaticLayout;
 use crate::{print, println};
 
 /// Context information collected in trap.s before calling rust trap handler
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct TrapFrame {
     /// General purpose registers
     pub regs: [usize; 32],
@@ -110,10 +109,12 @@ extern "C" fn rust_trap(
     let cause = TrapCause(acause);
     let mut return_pc = epc;
     let cause_number = cause.number();
+    // safety: this is not actually safe. Only in place for debug prints.
+    let mut uart = unsafe { Uart0::new() };
     if cause.is_async() {
         match cause_number {
             3 => {
-                println!("Machine software interrupt: core#{}", hart);
+                println!(uart, "Machine software interrupt: core#{}", hart);
             }
             7 => {
                 // println!("Machine timer interrupt: core#{}", hart);
@@ -126,16 +127,17 @@ extern "C" fn rust_trap(
                             // on qemu/virtio this is the UART singaling input
                             // todo: can these match statements be extricated from the trap handler logic
                             // so different hardware can be supported by compile options
-                            if let Some(c) = <Uart<UART_BASE_ADDRESS> as Default>::default().get() {
+
+                            if let Some(c) = uart.get() {
                                 match c {
                                     8 => {
-                                        print!("\x08 \x08");
+                                        print!(uart, "\x08 \x08");
                                     }
                                     10 | 13 => {
-                                        println!("");
+                                        println!(uart, "");
                                     }
                                     _ => {
-                                        print!("{}", c as char);
+                                        print!(uart, "{}", c as char);
                                     }
                                 }
                             }
@@ -144,7 +146,7 @@ extern "C" fn rust_trap(
                     }
                     PLIC.complete(interrupt);
                 } else {
-                    println!("Machine external interrupt: core#{}", hart);
+                    println!(uart, "Machine external interrupt: core#{}", hart);
                 }
             }
             _ => {
@@ -157,10 +159,15 @@ extern "C" fn rust_trap(
                 "Instruction address misaligned: #{}/0x{:08x}/{}",
                 hart, epc, tval
             ),
-            1 => panic!("Instruction access fault: #{}/0x{:08x}/{}", hart, epc, tval),
+            1 => {
+                panic!(
+                    "Instruction access fault: #{}/0x{:08x}/{} {status}: {frame:?}",
+                    hart, epc, tval
+                )
+            }
             2 => panic!("Illegal instruction: #{}/0x{:08x}/{}", hart, epc, tval),
             3 => {
-                println!("Skipped breakpoint: #{}/0x{:08x}", hart, epc);
+                println!(uart, "Skipped breakpoint: #{}/0x{:08x}", hart, epc);
                 return_pc += 4;
             }
             4 => panic!("Load address misaligned: #{}/0x{:08x}/{}", hart, epc, tval),
@@ -171,15 +178,15 @@ extern "C" fn rust_trap(
             ),
             7 => panic!("Store/AMO fault: #{}/0x{:08x}/{}", hart, epc, tval),
             8 => {
-                println!("External call from user mode: #{}/0x{:08x}", hart, epc);
+                println!(uart, "External call from user mode: #{}/0x{:08x}", hart, epc);
                 return_pc += 4;
             }
             9 => {
-                println!("External call from supervisor mode:#{}/0x{:08x}", hart, epc);
+                println!(uart, "External call from supervisor mode:#{}/0x{:08x}", hart, epc);
                 return_pc += 4;
             }
             11 => {
-                println!("External call from Machine mode?!:#{}/0x{:08x}", hart, epc);
+                println!(uart, "External call from Machine mode?!:#{}/0x{:08x}", hart, epc);
                 return_pc += 4;
             }
 
