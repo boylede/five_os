@@ -1,7 +1,6 @@
 use core::{arch::asm, mem};
 
-const XLEN: usize = mem::size_of::<usize>() * 8;
-const KINDMASK: usize = 0b1 << (XLEN - 1);
+use num_enum::{FromPrimitive, IntoPrimitive};
 
 pub enum TrapKind {
     Interrupt,
@@ -47,20 +46,25 @@ impl TrapCause {
         n == 3 || n == 7 || n == 11
     }
     pub fn known_cause(&self) -> KnownCause {
-        todo!()
+        match self.is_async() {
+            true => KnownCause::Async(self.number().into()),
+            false => KnownCause::Async(self.number().into()),
+        }
     }
 }
 
-/// An enumeration over parsed values of mcause
-/// unexpected values are filtered out into Reserved values
+/// Parsed values of mcause.
+/// Unexpected values are filtered out into Reserved values
 pub enum KnownCause {
     Sync(SyncCause),
     Async(AsyncCause),
 }
 
-/// enumeration for defined sync causes
-/// 2, 6, 10, 12, 13, 14, 15 are reserved in this version of the spec
-/// causes >=16 are implemention defined
+/// Defined sync causes.
+/// Causes 2, 6, 10, 12, 13, 14, 15 are reserved in this version of the spec.
+/// Causes >=16 are implemention defined.
+#[derive(FromPrimitive, IntoPrimitive)]
+#[repr(usize)]
 pub enum SyncCause {
     UserSoftwareInterrupt = 0,
     SupervisorSoftwareInterrupt = 1,
@@ -72,11 +76,14 @@ pub enum SyncCause {
     UserExternalInterrupt = 8,
     SupervisorExternalInterrupt = 9,
     MachineExternalInterrupt = 11,
+    #[num_enum(default)]
     ImplementationDefinedLocalInterrupts = 16,
 }
 
-/// enumeration for defined async causes
-/// 10, 14, >=16 are reserved in this version of the spec
+/// Defined async causes.
+/// Causes 10, 14, >=16 are reserved in this version of the spec.
+#[derive(FromPrimitive, IntoPrimitive)]
+#[repr(usize)]
 pub enum AsyncCause {
     InstructionAddressMisaligned = 0,
     InstructionAccessFault = 1,
@@ -92,8 +99,12 @@ pub enum AsyncCause {
     InstructionPageFault = 12,
     LoadPageFault = 13,
     StoreAMOPageFault = 15,
+    #[num_enum(default)]
     Reserved = 254,
 }
+
+const XLEN: usize = mem::size_of::<usize>() * 8;
+const KINDMASK: usize = 0b1 << (XLEN - 1);
 
 /// Gets the kind of trap triggered, an interrupt or an exception.
 #[inline]

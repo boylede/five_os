@@ -12,17 +12,12 @@ use fiveos_allocator::{
     page::{bitmap::PageMarker, Page, PageAllocator},
 };
 use fiveos_riscv::{
-    cpu::{
-        self,
-        registers::{
-            misa::Misa,
-            raw::{
-                asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_mtvec, asm_get_mvendorid,
-            },
-        },
+    cpu::registers::{
+        misa::Misa,
+        mtvec,
+        raw::{asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_mvendorid},
     },
     mmu::{
-        entry::PTEntryRead,
         page_table::{
             descriptor::PageTableDescriptor, forty_eight::SV_FORTY_EIGHT,
             thirty_nine::SV_THIRTY_NINE, thirty_two::SV_THIRTY_TWO, untyped::PageTableUntyped,
@@ -34,7 +29,7 @@ use fiveos_riscv::{
 use fiveos_virtio::{
     clint::{CLINT_BASE_ADDRESS, CLINT_END_ADDRESS},
     plic::{PLIC, PLIC_BASE_ADDRESS, PLIC_END_ADDRESS},
-    uart::{UART_BASE_ADDRESS, UART_END_ADDRESS},
+    uart::{Uart0, UART_BASE_ADDRESS, UART_END_ADDRESS},
     Peripherals, PERIPHERALS,
 };
 
@@ -268,7 +263,7 @@ extern "C" fn kinit() {
     print_mem_bitmap(&mut uart);
 
     println!(uart, "[bookmark sigil] Leaving kinit");
-    kmain(&mut uart);
+    test_allocations(&mut uart);
     unsafe {
         asm!("csrw satp, {}", in(reg) satp_val);
         asm!("sfence.vma zero, {}", in(reg)0);
@@ -276,8 +271,31 @@ extern "C" fn kinit() {
 }
 
 #[no_mangle]
-extern "C" fn kmain(mut uart: &mut impl Write) {
-    print_title!(uart, "entering kmain");
+extern "C" fn kmain() {
+    // Safety, this function doesn't get called, will be deleted
+    let mut uart = unsafe { Uart0::new() };
+    println!(uart, "entered KMAIN");
+    loop {
+        unsafe {
+            asm!("wfi");
+        }
+    }
+}
+
+extern "C" fn test_allocations(uart: &mut impl Write) {
+    unsafe {
+        // Set the next machine timer to fire.
+        let mtimecmp = 0x0200_4000 as *mut u64;
+        let mtime = 0x0200_bff8 as *const u64;
+        // The frequency given by QEMU is 10_000_000 Hz, so this sets
+        // the next interrupt to fire one second from now.
+        mtimecmp.write_volatile(mtime.read_volatile() + 10_000_000);
+
+        // Let's cause a page fault and see what happens. This should trap
+        // to m_trap under trap.rs
+        let v = 0x0 as *mut u64;
+        v.write_volatile(0);
+    }
 
     println!(uart, "setting up UART receiver");
     PLIC.set_threshold(0);
@@ -312,7 +330,7 @@ extern "C" fn kinit_hart() -> ! {
 }
 
 ////////////////////////////////////////////// todo: relocate below this line
-pub fn print_cpu_info(mut uart: &mut impl Write) {
+pub fn print_cpu_info(uart: &mut impl Write) {
     let vendor = unsafe { asm_get_mvendorid() };
     let architecture = unsafe { asm_get_marchid() };
     let implementation = unsafe { asm_get_mimpid() };
@@ -327,16 +345,16 @@ pub fn print_cpu_info(mut uart: &mut impl Write) {
     print_misa_info(uart);
 }
 
-pub fn print_trap_info(mut uart: &mut impl Write) {
+pub fn print_trap_info(uart: &mut impl Write) {
     let mepc = unsafe { asm_get_mepc() };
     println!(uart, "mepc: {:x}", mepc);
-    let mtvec = unsafe { asm_get_mtvec() };
+    let mtvec = unsafe { mtvec::read() };
     println!(uart, "mtvec: {:x}", mtvec);
 }
 
-pub fn inspect_trap_vector(mut uart: &mut impl Write) {
+pub fn inspect_trap_vector(uart: &mut impl Write) {
     printhdr!(uart, "Trap");
-    let mtvec = unsafe { asm_get_mtvec() };
+    let mtvec = unsafe { mtvec::read() };
     if mtvec == 0 {
         println!(uart, "trap vector not initialized");
         return;
@@ -356,7 +374,7 @@ pub fn print_page_table_untyped(uart: &mut impl Write, table: &PageTableUntyped)
     println!(uart, "{}", table.into_dynamic_typed(&descriptor));
 }
 
-pub fn print_misa_info(mut uart: &mut impl Write) {
+pub fn print_misa_info(uart: &mut impl Write) {
     printhdr!(uart, "Machine Instruction Set Architecture");
     let misa = Misa::get();
     let Some(misa) = misa else {
@@ -391,7 +409,7 @@ pub fn alloc_table_entry_to_page_address(entry: &mut PageMarker) -> usize {
     alloc_start + (page_entry - heap_start) * PAGE_SIZE
 }
 
-pub fn page_table() -> (&'static mut [PageMarker]) {
+pub fn page_table() -> &'static mut [PageMarker] {
     let layout = StaticLayout::get();
     let heap_start = { layout.heap_start as *mut PageMarker };
     let count = layout.heap_size / PAGE_SIZE;
@@ -400,7 +418,7 @@ pub fn page_table() -> (&'static mut [PageMarker]) {
 }
 
 /// prints out the currently allocated pages
-pub fn print_mem_bitmap(mut uart: &mut impl Write) {
+pub fn print_mem_bitmap(uart: &mut impl Write) {
     print_title!(uart, "Allocator Bitmap");
     let page_table = page_table();
     let page_count = page_table.len();
@@ -449,7 +467,7 @@ pub fn print_mem_bitmap(mut uart: &mut impl Write) {
 }
 
 /// prints the allocation table
-pub fn kmem_print_table(mut uart: &mut impl Write) {
+pub fn kmem_print_table(uart: &mut impl Write) {
     unsafe {
         let mut head = KMEM_HEAD as *mut AllocList;
         let tail = (head).add(KMEM_SIZE) as *mut AllocList;
@@ -480,7 +498,7 @@ pub const fn align_to(address: usize, alignment: usize) -> usize {
     (address + mask) & !mask
 }
 
-pub fn layout_sanity_check(mut uart: &mut impl Write, l: &StaticLayout) {
+pub fn layout_sanity_check(uart: &mut impl Write, l: &StaticLayout) {
     print_title!(uart, "Static Layout Sanity Check");
     println!(
         uart,

@@ -39,7 +39,7 @@ impl TrapFrame {
 /// todo: initialize in kinit with accurate number of harts
 pub static mut GLOBAL_TRAPFRAMES: &mut [TrapFrame; 4] = &mut [TrapFrame::NULL; 4];
 
-fn handle_external_interrupt(uart: &mut Uart0, hart: usize,) {
+fn handle_external_interrupt(uart: &mut Uart0, hart: usize) {
     if let Some(interrupt) = PLIC.claim() {
         match interrupt.number() {
             10 => {
