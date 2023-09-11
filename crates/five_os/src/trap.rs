@@ -1,4 +1,5 @@
 use core::ptr::null_mut;
+use fiveos_riscv::cpu::registers::mcause::{AsyncCause, KnownCause, SyncCause, TrapCause};
 use fiveos_virtio::plic::PLIC;
 use fiveos_virtio::uart::{Uart, Uart0, UART_BASE_ADDRESS};
 
@@ -38,62 +39,34 @@ impl TrapFrame {
 /// todo: initialize in kinit with accurate number of harts
 pub static mut GLOBAL_TRAPFRAMES: &mut [TrapFrame; 4] = &mut [TrapFrame::NULL; 4];
 
-#[derive(Debug)]
-#[repr(transparent)]
-struct TrapCause(usize);
+fn handle_external_interrupt(uart: &mut Uart0, hart: usize,) {
+    if let Some(interrupt) = PLIC.claim() {
+        match interrupt.number() {
+            10 => {
+                // on qemu/virtio this is the UART singaling input
+                // todo: can these match statements be extricated from the trap handler logic
+                // so different hardware can be supported by compile options
 
-impl TrapCause {
-    pub fn is_async(&self) -> bool {
-        (self.0 >> 63) & 1 == 1
+                if let Some(c) = uart.get() {
+                    match c {
+                        8 => {
+                            print!(uart, "\x08 \x08");
+                        }
+                        10 | 13 => {
+                            println!(uart, "");
+                        }
+                        _ => {
+                            print!(uart, "{}", c as char);
+                        }
+                    }
+                }
+            }
+            _ => (),
+        }
+        PLIC.complete(interrupt);
+    } else {
+        println!(uart, "Machine external interrupt: core#{}", hart);
     }
-    pub fn number(&self) -> usize {
-        self.0 & 0xfff
-    }
-    pub fn is_software(&self) -> bool {
-        let n = self.number();
-        !self.is_async() && n <= 3
-    }
-    pub fn is_timer(&self) -> bool {
-        let n = self.number();
-        !self.is_async() && n > 3 && n <= 7
-    }
-    pub fn is_external(&self) -> bool {
-        let n = self.number();
-        !self.is_async() && n > 7 && n <= 11
-    }
-    pub fn is_user(&self) -> bool {
-        let n = self.number();
-        n == 0 || n == 4 || n == 8
-    }
-    pub fn is_supervisor(&self) -> bool {
-        let n = self.number();
-        n == 1 || n == 5 || n == 9
-    }
-    pub fn is_machine(&self) -> bool {
-        let n = self.number();
-        n == 3 || n == 7 || n == 11
-    }
-}
-
-#[repr(usize)]
-#[non_exhaustive]
-pub enum AsyncCause {
-    InstructionAddressMisaligned = 0,
-    InstructionAccessFault = 1,
-    IllegalInstruction = 2,
-    Breakpoint = 3,
-    LoadAddressMisaligned = 4,
-    LoadAccessFault = 5,
-    StoreAMOAddressMisaligned = 6,
-    StoreAMOAccessFault = 7,
-    EnvironmentCallUmode = 8,
-    EnvironmentCallSmode = 9,
-    // Reserved = 10,
-    EnvironmentCallMmode = 11,
-    InstructionPageFault = 12,
-    LoadPageFault = 13,
-    // Reserved = 14,
-    StoreAMOPageFault = 15,
 }
 
 #[no_mangle]
@@ -106,104 +79,83 @@ extern "C" fn rust_trap(
     status: usize,
     frame: &mut TrapFrame,
 ) -> usize {
-    let cause = TrapCause(acause);
+    let cause = TrapCause(acause).known_cause();
     let mut return_pc = epc;
-    let cause_number = cause.number();
+    // let cause_number = cause.number();
     // safety: this is not actually safe. Only in place for debug prints.
     let mut uart = unsafe { Uart0::new() };
-    if cause.is_async() {
-        match cause_number {
-            3 => {
-                println!(uart, "Machine software interrupt: core#{}", hart);
+    use AsyncCause as AC;
+    use KnownCause as KC;
+    use SyncCause as SC;
+    match cause {
+        KC::Sync(sync_cause) => match sync_cause {
+            SC::MachineSoftwareInterrupt => {
+                println!(uart, "Machine software interrupt: core#{}", hart)
             }
-            7 => {
-                // println!("Machine timer interrupt: core#{}", hart);
-                // do nothing for the moment
-            }
-            11 => {
-                if let Some(interrupt) = PLIC.claim() {
-                    match interrupt.number() {
-                        10 => {
-                            // on qemu/virtio this is the UART singaling input
-                            // todo: can these match statements be extricated from the trap handler logic
-                            // so different hardware can be supported by compile options
-
-                            if let Some(c) = uart.get() {
-                                match c {
-                                    8 => {
-                                        print!(uart, "\x08 \x08");
-                                    }
-                                    10 | 13 => {
-                                        println!(uart, "");
-                                    }
-                                    _ => {
-                                        print!(uart, "{}", c as char);
-                                    }
-                                }
-                            }
-                        }
-                        _ => (),
-                    }
-                    PLIC.complete(interrupt);
-                } else {
-                    println!(uart, "Machine external interrupt: core#{}", hart);
-                }
-            }
-            _ => {
-                panic!("Unhandled async trap: core#{} -> {}\n", hart, cause_number);
-            }
-        }
-    } else {
-        match cause_number {
-            0 => panic!(
+            SC::MachineTimerInterrupt => println!(uart, "Machine timer interrupt: core#{}", hart),
+            SC::MachineExternalInterrupt => handle_external_interrupt(&mut uart, hart),
+            _ => panic!("Unhandled async trap: core#{} -> {:#x}\n", hart, acause),
+        },
+        KC::Async(async_cause) => match async_cause {
+            AC::InstructionAddressMisaligned => panic!(
                 "Instruction address misaligned: #{}/0x{:08x}/{}",
                 hart, epc, tval
             ),
-            1 => {
-                panic!(
-                    "Instruction access fault: #{}/0x{:08x}/{} {status}: {frame:?}",
-                    hart, epc, tval
-                )
+            AC::InstructionAccessFault => panic!(
+                "Instruction access fault: #{}/0x{:08x}/{} {status}: {frame:?}",
+                hart, epc, tval
+            ),
+            AC::IllegalInstruction => {
+                panic!("Illegal instruction: #{}/0x{:08x}/{}", hart, epc, tval)
             }
-            2 => panic!("Illegal instruction: #{}/0x{:08x}/{}", hart, epc, tval),
-            3 => {
+            AC::Breakpoint => {
                 println!(uart, "Skipped breakpoint: #{}/0x{:08x}", hart, epc);
                 return_pc += 4;
             }
-            4 => panic!("Load address misaligned: #{}/0x{:08x}/{}", hart, epc, tval),
-            5 => panic!("Load access fault: #{}/0x{:08x}/{}", hart, epc, tval),
-            6 => panic!(
+            AC::LoadAddressMisaligned => {
+                panic!("Load address misaligned: #{}/0x{:08x}/{}", hart, epc, tval)
+            }
+            AC::LoadAccessFault => panic!("Load access fault: #{}/0x{:08x}/{}", hart, epc, tval),
+            AC::StoreAMOAddressMisaligned => panic!(
                 "Store/AMO address misaligned: #{}/0x{:08x}/{}",
                 hart, epc, tval
             ),
-            7 => panic!("Store/AMO fault: #{}/0x{:08x}/{}", hart, epc, tval),
-            8 => {
-                println!(uart, "External call from user mode: #{}/0x{:08x}", hart, epc);
+            AC::StoreAMOAccessFault => panic!("Store/AMO fault: #{}/0x{:08x}/{}", hart, epc, tval),
+            AC::EnvironmentCallUmode => {
+                println!(
+                    uart,
+                    "External call from user mode: #{}/0x{:08x}", hart, epc
+                );
                 return_pc += 4;
             }
-            9 => {
-                println!(uart, "External call from supervisor mode:#{}/0x{:08x}", hart, epc);
+            AC::EnvironmentCallSmode => {
+                println!(
+                    uart,
+                    "External call from supervisor mode:#{}/0x{:08x}", hart, epc
+                );
                 return_pc += 4;
             }
-            11 => {
-                println!(uart, "External call from Machine mode?!:#{}/0x{:08x}", hart, epc);
+            AC::EnvironmentCallMmode => {
+                println!(
+                    uart,
+                    "External call from Machine mode?!:#{}/0x{:08x}", hart, epc
+                );
                 return_pc += 4;
             }
-
-            12 => {
+            AC::InstructionPageFault => {
                 panic!("Instruction page fault: #{}/0x{:08x}/{}", hart, epc, tval);
             }
-            13 => {
+            AC::LoadPageFault => {
                 panic!("Load page fault: #{}/0x{:08x}/{}", hart, epc, tval);
             }
-            15 => {
+            AC::StoreAMOPageFault => {
                 panic!("Store page fault: #{}/0x{:08x}/{}", hart, epc, tval);
             }
-            _ => {
-                panic!("Unhandled synchronous trap: #{}/{}", hart, cause_number);
+            AC::Reserved => {
+                panic!("Unhandled synchronous trap: #{}/{:?}", hart, acause);
             }
-        }
-    };
+        },
+    }
     return_pc
 }
 
