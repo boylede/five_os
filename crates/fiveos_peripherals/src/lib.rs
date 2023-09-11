@@ -7,7 +7,7 @@ use core::{
     cell::UnsafeCell,
     marker::PhantomData,
     mem::MaybeUninit,
-    sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering, ATOMIC_USIZE_INIT, AtomicPtr},
+    sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, AtomicU8, Ordering, ATOMIC_USIZE_INIT},
 };
 
 // use fiveos_virtio::uart::RawConsole;
@@ -23,7 +23,7 @@ use core::{
 //         AtomicConsole(hardware)
 //     }
 //     pub fn send(&self, item: T) {
-        
+
 //     }
 // }
 
@@ -71,7 +71,7 @@ use core::{
 //             }
 //         }
 //         None
-        
+
 //     }
 // }
 

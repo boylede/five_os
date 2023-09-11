@@ -9,6 +9,6 @@ const LOGO: &str = r"
                  /_/ /___/ |___/___/  \____/___/
 ";
 
-pub fn print_logo(mut writee: &mut impl Write) {
+pub fn print_logo(writee: &mut impl Write) {
     println!(writee, "{}", LOGO);
 }

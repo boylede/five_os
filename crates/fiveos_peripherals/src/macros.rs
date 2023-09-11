@@ -1,4 +1,3 @@
-
 #[macro_export]
 macro_rules! print {
     ($writee:ident, $($args:tt)+) => ({
@@ -30,7 +29,7 @@ macro_rules! printhdr {
         const HEADER_WIDTH: usize = 64;
         let remainder = (HEADER_WIDTH - len);
         for _ in 0..remainder {
-            print!($writee,"~");
+            print!($writee, "~");
         }
         println!($writee,);
     }};
@@ -50,7 +49,7 @@ macro_rules! printhdr {
         if remainder * 2 + len != HEADER_WIDTH {
             print!($writee, "~");
         }
-        println!($writee, );
+        println!($writee,);
     }};
 }
 
@@ -62,27 +61,27 @@ macro_rules! print_title {
         let remainder = (HEADER_WIDTH - len) / 2;
 
         for _ in 0..HEADER_WIDTH {
-            print!($writee,"#");
+            print!($writee, "#");
         }
         println!($writee,);
-        print!($writee,"#");
+        print!($writee, "#");
 
         for _ in 0..remainder {
-            print!($writee," ");
+            print!($writee, " ");
         }
 
-        print!($writee,$fmt);
+        print!($writee, $fmt);
 
         for _ in 0..remainder {
-            print!($writee," ");
+            print!($writee, " ");
         }
         if remainder * 2 + len != HEADER_WIDTH {
-            print!($writee," ");
+            print!($writee, " ");
         }
-        print!($writee,"#");
+        print!($writee, "#");
         println!($writee,);
         for _ in 0..HEADER_WIDTH {
-            print!($writee,"#");
+            print!($writee, "#");
         }
         println!($writee,);
     }};

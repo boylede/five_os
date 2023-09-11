@@ -2,7 +2,7 @@
 
 use core::marker::PhantomData;
 
-use uart::{Uart0, Uart};
+use uart::{Uart, Uart0};
 
 pub mod clint;
 pub mod plic;
@@ -10,7 +10,7 @@ pub mod rtc;
 pub mod uart;
 
 pub static mut PERIPHERALS: Option<Peripherals> = Some(Peripherals {
-    uart: unsafe {Uart0::new()},
+    uart: unsafe { Uart0::new() },
 });
 
 pub struct Peripherals {
@@ -23,4 +23,3 @@ impl Peripherals {
     //     p.unwrap()
     // }
 }
-

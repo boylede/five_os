@@ -1,5 +1,4 @@
 ///! Access to the mstatus csr, based on The RISC-V Instruction Set Manual Vol II, Privileged Architecture Version 1.9
-
 use core::arch::asm;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use paste::paste;
@@ -114,7 +113,6 @@ pub enum VirtualMemoryMode {
     Sv57 = 11,
     Sv64 = 12,
 }
-
 
 /// The mode that determines what access the CPU currently has
 #[derive(Debug, Eq, PartialEq, FromPrimitive, IntoPrimitive)]

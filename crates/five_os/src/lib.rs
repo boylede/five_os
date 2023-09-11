@@ -7,7 +7,7 @@
     const_mut_refs
 )]
 
-use fiveos_peripherals::{println, print};
+use fiveos_peripherals::{print, println};
 use fiveos_virtio::uart::Uart0;
 
 // Allow testing this library
@@ -28,7 +28,7 @@ extern "C" fn eh_personality() {}
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    let mut uart = unsafe {Uart0::new()};
+    let mut uart = unsafe { Uart0::new() };
     println!(uart, "aborting: {}", info);
     abort();
 }

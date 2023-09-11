@@ -19,7 +19,7 @@ impl Uart0 {
 
 impl Write for Uart0 {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        <Uart<UART_BASE_ADDRESS> as Write>::write_str(&mut self.0, s)
+        Write::write_str(&mut self.0, s)
     }
 }
 
@@ -38,7 +38,7 @@ impl DerefMut for Uart0 {
 }
 
 /// ZST for direct Uart access
-///
+/// Generic argument B is the base address for hardware access
 pub struct Uart<const B: usize> {}
 
 impl<const B: usize> Uart<B> {
