@@ -43,9 +43,9 @@ User Mode (U)
 #                  Static Layout Sanity Check                  #
 ################################################################
 text:   80000000 - 8000e000     57344-bytes
- trap:  8000deea - 8000e000??
+ trap:  8000dfea - 8000e000??
 global: 8000e000
-rodata: 8000e000 - 80012028     16424-bytes
+rodata: 8000e000 - 80011fb8     16312-bytes
 data:   80013000 - 80013238     568-bytes
 bss:    80013238 - 80013b68     2352-bytes
  stack: 80013b68 - 80093b68     524288-bytes
@@ -63,7 +63,7 @@ Kernel Root Page Table: 0x800dd000-0x800dd000 RW-
 Kernel Dynamic Memory: 0x8009d000-0x800dd000 RW-
 Allocation Bitmap: 0x80093b68-0x8009bad4 R-E
 Kernel Code Section: 0x80000000-0x8000e000 R-E
-Readonly Data Section: 0x8000e000-0x80012028 R-E
+Readonly Data Section: 0x8000e000-0x80011fb8 R-E
 Data Section: 0x80013000-0x80013238 RW-
 BSS section: 0x80013238-0x80013b68 RW-
 Kernel Stack: 0x80013b68-0x80093b68 RW-

@@ -33,7 +33,7 @@ use layout::StaticLayout;
 
 use crate::{
     kernel_heap::{init_kmem, kmem_print_table, HeapInfo},
-    memory_manager::{init_allocator, print_mem_bitmap, print_memory_manager_info},
+    memory_manager::init_allocator,
 };
 
 mod kernel_heap;
@@ -86,7 +86,7 @@ extern "C" fn kinit() {
     /////////////////////////////////////////////////////////////////////////////////////////
     // Setup the kernel's page table to keep track of allocations.
     let (mut page_allocator, memory_manager_info) = unsafe { init_allocator(layout) };
-    print_memory_manager_info(&mut uart,  &memory_manager_info);
+    print!(uart, "{:?}", memory_manager_info);
     /////////////////////////////////////////////////////////////////////////////////////////
     // Set up trap stack & print
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -253,7 +253,7 @@ extern "C" fn kinit() {
         }
     }
 
-    print_mem_bitmap(&mut uart);
+    print!(uart, "{:?}", page_allocator);
 
     test_allocations(&mut uart);
     unsafe {

@@ -25,13 +25,13 @@ dependencies = [
 [[package]]
 name = "fiveos_allocator"
 version = "0.2.0"
+dependencies = [
+ "fiveos_peripherals",
+]
 
 [[package]]
 name = "fiveos_peripherals"
 version = "0.0.1"
-dependencies = [
- "fiveos_virtio",
-]
 
 [[package]]
 name = "fiveos_riscv"

@@ -5,3 +5,4 @@ authors = ["Daniel Boyle <boyledegmail.com>"]
 edition = "2021"
 
 [dependencies]
+fiveos_peripherals = {path="../fiveos_peripherals"}

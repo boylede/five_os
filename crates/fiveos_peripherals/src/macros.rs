@@ -1,88 +1,86 @@
 #[macro_export]
 macro_rules! print {
-    ($writee:ident, $($args:tt)+) => ({
+    ($f:ident, $($args:tt)+) => ({
         use core::fmt::Write;
-        // use fiveos_virtio::uart::{Uart0};
-        // let mut uart0 = unsafe {Uart0::new()};
-        let _ = write!($writee, $($args)+);
+        let _ = write!($f, $($args)+);
     });
 }
 
 #[macro_export]
 macro_rules! println
 {
-	($writee:ident,) => ({
-		print!($writee, "\r\n")
+	($f:ident,) => ({
+		print!($f, "\r\n")
 	});
-	($writee:ident, $fmt:expr) => ({
-		print!($writee, concat!($fmt, "\r\n"))
+	($f:ident, $fmt:expr) => ({
+		print!($f, concat!($fmt, "\r\n"))
 	});
-	($writee:ident, $fmt:expr, $($args:tt)+) => ({
-		print!($writee, concat!($fmt, "\r\n"), $($args)+)
+	($f:ident, $fmt:expr, $($args:tt)+) => ({
+		print!($f, concat!($fmt, "\r\n"), $($args)+)
 	});
 }
 
 #[macro_export]
 macro_rules! printhdr {
-    ($writee:ident,) => {{
+    ($f:ident,) => {{
         let len = 0;
         const HEADER_WIDTH: usize = 64;
         let remainder = (HEADER_WIDTH - len);
         for _ in 0..remainder {
-            print!($writee, "~");
+            print!($f, "~");
         }
-        println!($writee,);
+        println!($f,);
     }};
-    ($writee:ident,$fmt:expr) => {{
+    ($f:ident,$fmt:expr) => {{
         let len = $fmt.len() + 2;
         const HEADER_WIDTH: usize = 64;
         let remainder = (HEADER_WIDTH - len) / 2;
         for _ in 0..remainder {
-            print!($writee, "~");
+            print!($f, "~");
         }
-        print!($writee, " ");
-        print!($writee, $fmt);
-        print!($writee, " ");
+        print!($f, " ");
+        print!($f, $fmt);
+        print!($f, " ");
         for _ in 0..remainder {
-            print!($writee, "~");
+            print!($f, "~");
         }
         if remainder * 2 + len != HEADER_WIDTH {
-            print!($writee, "~");
+            print!($f, "~");
         }
-        println!($writee,);
+        println!($f,);
     }};
 }
 
 #[macro_export]
 macro_rules! print_title {
-    ($writee:ident,$fmt:expr) => {{
+    ($f:ident,$fmt:expr) => {{
         let len = $fmt.len() + 2;
         const HEADER_WIDTH: usize = 64;
         let remainder = (HEADER_WIDTH - len) / 2;
 
         for _ in 0..HEADER_WIDTH {
-            print!($writee, "#");
+            print!($f, "#");
         }
-        println!($writee,);
-        print!($writee, "#");
+        println!($f,);
+        print!($f, "#");
 
         for _ in 0..remainder {
-            print!($writee, " ");
+            print!($f, " ");
         }
 
-        print!($writee, $fmt);
+        print!($f, $fmt);
 
         for _ in 0..remainder {
-            print!($writee, " ");
+            print!($f, " ");
         }
         if remainder * 2 + len != HEADER_WIDTH {
-            print!($writee, " ");
+            print!($f, " ");
         }
-        print!($writee, "#");
-        println!($writee,);
+        print!($f, "#");
+        println!($f,);
         for _ in 0..HEADER_WIDTH {
-            print!($writee, "#");
+            print!($f, "#");
         }
-        println!($writee,);
+        println!($f,);
     }};
 }

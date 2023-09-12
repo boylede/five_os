@@ -1,8 +1,10 @@
 use core::assert;
+use core::fmt::Debug;
 use core::mem::size_of;
 
 pub mod bitmap;
 use bitmap::PageMarker;
+use fiveos_peripherals::{print, print_title, printhdr, println};
 
 pub struct PageContents(core::sync::atomic::AtomicU8);
 
@@ -30,7 +32,7 @@ impl<const A: usize> PageAllocator<A> {
         this
     }
     /// Provides the head and tail for debug purposes
-    pub fn info(&self) -> (usize,usize) {
+    pub fn info(&self) -> (usize, usize) {
         (self.head, self.tail)
     }
     fn clear_bitmap(&mut self) {
@@ -123,6 +125,58 @@ impl<const A: usize> PageAllocator<A> {
     pub fn address_to_page_index(&self, address: *mut usize) -> usize {
         assert!(!address.is_null());
         (address as usize - self.head) / A
+    }
+    pub fn marker_to_address(&self, marker: &PageMarker) -> usize {
+        let alloc_start = self.first_page();
+        let heap_start = self.head;
+        let page_entry = (marker as *const _) as usize;
+        alloc_start + (page_entry - heap_start) * A
+    }
+}
+
+impl<const A: usize> Debug for PageAllocator<A> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        print_title!(f, "Allocator Bitmap");
+        let bitmap = self.bitmap();
+        let page_count = bitmap.len();
+        {
+            let start = ((bitmap as *const _) as *const PageMarker) as usize;
+            let end = start + page_count * core::mem::size_of::<PageMarker>();
+            println!(f, "Alloc Table:\t{:x} - {:x}", start, end);
+        }
+        {
+            let alloc_start = self.first_page();
+            let alloc_end = alloc_start + page_count * A;
+            println!(f, "Usable Pages:\t{:x} - {:x}", alloc_start, alloc_end);
+        }
+        printhdr!(f,);
+        let mut middle = false;
+        let mut start = 0;
+        for page in bitmap.iter() {
+            if page.is_taken() {
+                if !middle {
+                    let page_address = self.marker_to_address(page);
+                    print!(f, "{:x} => ", page_address);
+                    middle = true;
+                    start = page_address;
+                }
+                if page.is_last() {
+                    let page_address = self.marker_to_address(page) + A - 1;
+                    let size = (page_address - start) / A;
+                    print!(f, "{:x}: {} page(s).", page_address, size + 1);
+                    println!(f, "");
+                    middle = false;
+                }
+            }
+        }
+        printhdr!(f,);
+        {
+            let used = bitmap.iter().filter(|page| page.is_taken()).count();
+            println!(f, "Allocated pages: {} = {} bytes", used, used * A);
+            let free = page_count - used;
+            println!(f, "Free pages: {} = {} bytes", free, free * A);
+        }
+        Ok(())
     }
 }
 
