@@ -3,7 +3,7 @@ use fiveos_riscv::cpu::registers::mcause::{AsyncCause, KnownCause, SyncCause, Tr
 use fiveos_virtio::plic::PLIC;
 use fiveos_virtio::uart::{Uart, Uart0, UART_BASE_ADDRESS};
 
-use crate::layout::StaticLayout;
+use crate::layout::LinkerLayout;
 use crate::{print, println};
 
 /// Context information collected in trap.s before calling rust trap handler
@@ -160,7 +160,7 @@ extern "C" fn rust_trap(
 }
 
 pub fn setup_trap_handler() {
-    let layout = StaticLayout::get();
+    let layout = LinkerLayout::get();
     let _ts = layout.trap_start;
     // TODO: set up trap handler
 }

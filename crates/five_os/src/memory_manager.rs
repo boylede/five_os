@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use five_os::layout::StaticLayout;
+use five_os::layout::LinkerLayout;
 use fiveos_allocator::page::{bitmap::PageMarker, PageAllocator};
 use fiveos_peripherals::{print, print_title, println};
 use fiveos_riscv::mmu::page_table::PAGE_SIZE;
@@ -30,13 +30,12 @@ impl Debug for MemoryManagerInfo {
     }
 }
 
-
 /// Initialize page allocator
-/// 
+///
 /// ## Safety
 /// This is expected to only run once, in kinit.
 pub unsafe fn init_allocator(
-    layout: &StaticLayout,
+    layout: &LinkerLayout,
 ) -> (&'static mut PageAllocator<PAGE_SIZE>, MemoryManagerInfo) {
     let bitmap_start = layout.heap_start;
     let end = layout.memory_end;
