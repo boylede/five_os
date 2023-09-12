@@ -7,10 +7,6 @@ use core::{arch::asm, fmt::Write, ptr::null_mut};
 use fiveos_peripherals::{print, print_title, printhdr, println};
 
 use five_os::{trap::TrapFrame, *};
-use fiveos_allocator::{
-    byte::{AllocList, BumpPointerAlloc},
-    page::{bitmap::PageMarker, Page, PageAllocator},
-};
 use fiveos_riscv::{
     cpu::registers::{
         misa::Misa,
@@ -35,17 +31,13 @@ use fiveos_virtio::{
 
 use layout::StaticLayout;
 
-// todo: improve how we initialize these statics
-#[global_allocator]
-static mut KERNEL_HEAP: BumpPointerAlloc<PAGE_SIZE> = BumpPointerAlloc::new(0, 0);
+use crate::{
+    kernel_heap::{init_kmem, kmem_print_table, HeapInfo},
+    memory_manager::{init_allocator, print_mem_bitmap, print_memory_manager_info},
+};
 
-// todo: improve how we initialize these statics
-static mut KERNEL_PAGE_ALLOCATOR: PageAllocator<PAGE_SIZE> = PageAllocator::uninitalized();
-
-// todo: eliminate accesses to these
-static mut KMEM_HEAD: *mut AllocList = null_mut();
-static mut KMEM_SIZE: usize = 64;
-static mut ALLOC_START: usize = 0;
+mod kernel_heap;
+mod memory_manager;
 
 /// MMU page table for kernel
 static mut KMEM_PAGE_TABLE: *mut PageTableUntyped = null_mut();
@@ -72,9 +64,16 @@ fn on_oom(_layout: core::alloc::Layout) -> ! {
 /// Our first entry point out of the assembly boot.s
 #[no_mangle]
 extern "C" fn kinit() {
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Init Peripherals
+    /////////////////////////////////////////////////////////////////////////////////////////
     // safety: we only call this once
     let Peripherals { mut uart } = unsafe { PERIPHERALS.take().unwrap_unchecked() };
     uart.init();
+
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Boot Prints
+    /////////////////////////////////////////////////////////////////////////////////////////
 
     logo::print_logo(&mut uart);
     print_cpu_info(&mut uart);
@@ -82,41 +81,27 @@ extern "C" fn kinit() {
     let layout = StaticLayout::get();
     layout_sanity_check(&mut uart, layout);
 
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Set up memory manager
+    /////////////////////////////////////////////////////////////////////////////////////////
     // Setup the kernel's page table to keep track of allocations.
-    let page_allocator;
-    {
-        let layout = StaticLayout::get();
-        let count;
-        let alloc_table_start;
-        let alloc_table_end;
-        unsafe {
-            KERNEL_PAGE_ALLOCATOR = PageAllocator::new(layout.heap_start, layout.memory_end);
-            page_allocator = &mut KERNEL_PAGE_ALLOCATOR;
-            count = KERNEL_PAGE_ALLOCATOR.page_count();
-            alloc_table_end = layout.heap_start + count * core::mem::size_of::<PageMarker>();
-            alloc_table_start = align_to(alloc_table_end, PAGE_SIZE);
-            ALLOC_START = alloc_table_start;
-        }
-        print_title!(uart, "Setup Memory Allocation");
-        println!(uart, "{} pages x {}-bytes", count, PAGE_SIZE);
-        println!(
-            uart,
-            "Allocation Table: {:x} - {:x}", layout.heap_start, alloc_table_end
-        );
-        println!(
-            uart,
-            "Usable Pages: {:x} - {:x}",
-            alloc_table_start,
-            alloc_table_start + count * PAGE_SIZE
-        );
-    }
+    let (mut page_allocator, memory_manager_info) = unsafe { init_allocator(layout) };
+    print_memory_manager_info(&mut uart,  &memory_manager_info);
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Set up trap stack & print
+    /////////////////////////////////////////////////////////////////////////////////////////
     // allocate some space to store a stack for the trap
     let trap_stack = page_allocator
         .zalloc(1)
         .expect("failed to initialize trap stack") as *mut u8 as usize;
 
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Hard-coded info about kernel's memory use
+    /////////////////////////////////////////////////////////////////////////////////////////
     let mut kernel_memory_map: [(&str, usize, usize, EntryFlags); 16] = [
+        // dynamic entry for kernel page table
         ("", 0, 0, EntryFlags::READ),
+        // dynamic entry for further kernel pages
         ("", 0, 0, EntryFlags::READ),
         (
             "Allocation Bitmap",
@@ -184,32 +169,40 @@ extern "C" fn kinit() {
             trap_stack + PAGE_SIZE,
             EntryFlags::READ_WRITE,
         ),
+        // unused entries
         ("", 0, 0, EntryFlags::READ),
         ("", 0, 0, EntryFlags::READ),
         ("", 0, 0, EntryFlags::READ),
     ];
 
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // init kernel heap
+    /////////////////////////////////////////////////////////////////////////////////////////
+
     // allocate pages for kernel memory, initialize bumplist/skiplist allocator
     // allocate page for kernel's page table
-    unsafe {
-        let k_alloc = page_allocator.zalloc(KMEM_SIZE).unwrap();
-        let k_alloc_end = (k_alloc as *mut usize as usize) + (KMEM_SIZE * PAGE_SIZE);
-        KMEM_HEAD = k_alloc as *mut Page<PAGE_SIZE> as *mut AllocList;
-        let kmem = KMEM_HEAD.as_mut().unwrap();
-        kmem.set_free();
-        kmem.set_size(KMEM_SIZE * PAGE_SIZE);
-        KMEM_PAGE_TABLE = page_allocator.zalloc(1).unwrap() as *mut PageTableUntyped;
-        KERNEL_HEAP = BumpPointerAlloc::new(k_alloc as *mut usize as usize, k_alloc_end);
+    let kernel_heap_info = init_kmem(&mut page_allocator);
 
-        {
-            let kpt = KMEM_PAGE_TABLE as *const _ as usize;
-            kernel_memory_map[0] = ("Kernel Root Page Table", kpt, kpt, EntryFlags::READ_WRITE);
-        }
-        {
-            let start = kmem as *mut _ as usize;
-            let end = start + KMEM_SIZE * PAGE_SIZE;
-            kernel_memory_map[1] = ("Kernel Dynamic Memory", start, end, EntryFlags::READ_WRITE);
-        }
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // init kernel page table for entry to S-mode & enabled virtual memory
+    /////////////////////////////////////////////////////////////////////////////////////////
+    let kernel_page_table = unsafe {
+        let kpt = page_allocator.zalloc(1).unwrap() as *mut PageTableUntyped;
+        let kpt_int = kpt as *const usize as usize;
+        KMEM_PAGE_TABLE = kpt;
+        kpt_int
+    };
+
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // add kernel dynamic memory info to memory map
+    /////////////////////////////////////////////////////////////////////////////////////////
+    {
+        let kpt = kernel_page_table;
+        kernel_memory_map[0] = ("Kernel Root Page Table", kpt, kpt, EntryFlags::READ_WRITE);
+    }
+    {
+        let HeapInfo { start, end, .. } = kernel_heap_info;
+        kernel_memory_map[1] = ("Kernel Dynamic Memory", start, end, EntryFlags::READ_WRITE);
     }
 
     let kernel_page_table = unsafe { KMEM_PAGE_TABLE.as_mut().unwrap() };
@@ -262,7 +255,6 @@ extern "C" fn kinit() {
 
     print_mem_bitmap(&mut uart);
 
-    println!(uart, "[bookmark sigil] Leaving kinit");
     test_allocations(&mut uart);
     unsafe {
         asm!("csrw satp, {}", in(reg) satp_val);
@@ -283,20 +275,6 @@ extern "C" fn kmain() {
 }
 
 extern "C" fn test_allocations(uart: &mut impl Write) {
-    unsafe {
-        // Set the next machine timer to fire.
-        let mtimecmp = 0x0200_4000 as *mut u64;
-        let mtime = 0x0200_bff8 as *const u64;
-        // The frequency given by QEMU is 10_000_000 Hz, so this sets
-        // the next interrupt to fire one second from now.
-        mtimecmp.write_volatile(mtime.read_volatile() + 10_000_000);
-
-        // Let's cause a page fault and see what happens. This should trap
-        // to m_trap under trap.rs
-        let v = 0x0 as *mut u64;
-        v.write_volatile(0);
-    }
-
     println!(uart, "setting up UART receiver");
     PLIC.set_threshold(0);
     PLIC.enable_interrupt(10);
@@ -400,102 +378,6 @@ pub fn print_misa_info(uart: &mut impl Write) {
             println!(uart, "{}", desc);
         }
     }
-}
-
-pub fn alloc_table_entry_to_page_address(entry: &mut PageMarker) -> usize {
-    let alloc_start = unsafe { ALLOC_START };
-    let heap_start = StaticLayout::get().heap_start;
-    let page_entry = (entry as *mut _) as usize;
-    alloc_start + (page_entry - heap_start) * PAGE_SIZE
-}
-
-pub fn page_table() -> &'static mut [PageMarker] {
-    let layout = StaticLayout::get();
-    let heap_start = { layout.heap_start as *mut PageMarker };
-    let count = layout.heap_size / PAGE_SIZE;
-    let table = unsafe { core::slice::from_raw_parts_mut(heap_start, count) };
-    table
-}
-
-/// prints out the currently allocated pages
-pub fn print_mem_bitmap(uart: &mut impl Write) {
-    print_title!(uart, "Allocator Bitmap");
-    let page_table = page_table();
-    let page_count = page_table.len();
-    {
-        let start = ((page_table as *const _) as *const PageMarker) as usize;
-        let end = start + page_count * core::mem::size_of::<PageMarker>();
-        println!(uart, "Alloc Table:\t{:x} - {:x}", start, end);
-    }
-    {
-        let alloc_start = unsafe { ALLOC_START };
-        let alloc_end = alloc_start + page_count * PAGE_SIZE;
-        println!(uart, "Usable Pages:\t{:x} - {:x}", alloc_start, alloc_end);
-    }
-    printhdr!(uart,);
-    let mut middle = false;
-    let mut start = 0;
-    for page in page_table.iter_mut() {
-        if page.is_taken() {
-            if !middle {
-                let page_address = alloc_table_entry_to_page_address(page);
-                print!(uart, "{:x} => ", page_address);
-                middle = true;
-                start = page_address;
-            }
-            if page.is_last() {
-                let page_address = alloc_table_entry_to_page_address(page) + PAGE_SIZE - 1;
-                let size = (page_address - start) / PAGE_SIZE;
-                print!(uart, "{:x}: {} page(s).", page_address, size + 1);
-                println!(uart, "");
-                middle = false;
-            }
-        }
-    }
-    printhdr!(uart,);
-    {
-        let used = page_table.iter().filter(|page| page.is_taken()).count();
-        println!(
-            uart,
-            "Allocated pages: {} = {} bytes",
-            used,
-            used * PAGE_SIZE
-        );
-        let free = page_count - used;
-        println!(uart, "Free pages: {} = {} bytes", free, free * PAGE_SIZE);
-    }
-}
-
-/// prints the allocation table
-pub fn kmem_print_table(uart: &mut impl Write) {
-    unsafe {
-        let mut head = KMEM_HEAD as *mut AllocList;
-        let tail = (head).add(KMEM_SIZE) as *mut AllocList;
-        while head < tail {
-            {
-                println!(uart, "inspecting {:x}", head as *mut u8 as usize);
-                let this = head.as_ref().unwrap();
-                println!(
-                    uart,
-                    "{:p}: Length = {:<10} Taken = {}",
-                    this,
-                    this.get_size(),
-                    this.is_taken()
-                );
-            }
-            let next = (head as *mut u8).add((*head).get_size());
-            println!(uart, "checking next: {:x}", next as usize);
-            head = next as *mut AllocList;
-        }
-    }
-    println!(uart, "done printing alloc table");
-}
-
-/// rounds the address up to the next aligned value. if the value is already aligned, it is unchanged.
-/// alignment is such that address % alignment == 0;
-pub const fn align_to(address: usize, alignment: usize) -> usize {
-    let mask = alignment - 1;
-    (address + mask) & !mask
 }
 
 pub fn layout_sanity_check(uart: &mut impl Write, l: &StaticLayout) {

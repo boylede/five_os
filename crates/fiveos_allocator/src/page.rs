@@ -27,8 +27,11 @@ impl<const A: usize> PageAllocator<A> {
     pub unsafe fn new(head: usize, tail: usize) -> PageAllocator<A> {
         let mut this = PageAllocator { head, tail };
         this.clear_bitmap();
-
         this
+    }
+    /// Provides the head and tail for debug purposes
+    pub fn info(&self) -> (usize,usize) {
+        (self.head, self.tail)
     }
     fn clear_bitmap(&mut self) {
         for entry in self.bitmap_mut().iter_mut() {
@@ -107,6 +110,8 @@ impl<const A: usize> PageAllocator<A> {
         Some(pages)
     }
     /// provides the number of pages that exist
+    /// assumes the bitmap takes less than a page...
+    /// todo: don't do that
     pub const fn page_count(&self) -> usize {
         (self.tail - self.head) / A
     }
