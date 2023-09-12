@@ -3,6 +3,7 @@
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
 extern crate alloc;
 use alloc::{boxed::Box, string::String, vec};
+use fiveos_allocator::page::PageAllocator;
 use core::{arch::asm, fmt::Write, ptr::null_mut};
 use fiveos_peripherals::{print, print_title, printhdr, println};
 
@@ -32,7 +33,7 @@ use fiveos_virtio::{
 use layout::StaticLayout;
 
 use crate::{
-    kernel_heap::{init_kmem, kmem_print_table, HeapInfo},
+    kernel_heap::{init_kmem, HeapInfo, inspect_heap},
     memory_manager::init_allocator,
 };
 
@@ -181,7 +182,7 @@ extern "C" fn kinit() {
 
     // allocate pages for kernel memory, initialize bumplist/skiplist allocator
     // allocate page for kernel's page table
-    let kernel_heap_info = init_kmem(&mut page_allocator);
+    let kernel_heap_info = unsafe {init_kmem(&mut page_allocator)};
 
     /////////////////////////////////////////////////////////////////////////////////////////
     // init kernel page table for entry to S-mode & enabled virtual memory
@@ -274,7 +275,7 @@ extern "C" fn kmain() {
     }
 }
 
-extern "C" fn test_allocations(uart: &mut impl Write) {
+fn test_allocations(uart: &mut impl Write) {
     println!(uart, "setting up UART receiver");
     PLIC.set_threshold(0);
     PLIC.enable_interrupt(10);
@@ -288,12 +289,14 @@ extern "C" fn test_allocations(uart: &mut impl Write) {
         let sparkle_heart = String::from_utf8(sparkle_heart).unwrap();
         println!(uart, "String = {}", sparkle_heart);
         println!(uart, "\n\nAllocations of a box, vector, and string");
-        kmem_print_table(uart);
+        
+        print!(uart, "{:?}", unsafe {inspect_heap()});
+        
         println!(uart, "test");
     }
     println!(uart, "test 2");
     println!(uart, "\n\nEverything should now be free:");
-    kmem_print_table(uart);
+    print!(uart, "{:?}", unsafe {inspect_heap()});
 
     printhdr!(uart, "reached end, looping");
     loop {}

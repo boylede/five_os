@@ -1,8 +1,11 @@
 extern crate alloc;
 
 use core::alloc::{GlobalAlloc, Layout};
+use core::fmt::Debug;
 use core::mem::size_of;
 use core::ptr::null_mut;
+
+use fiveos_peripherals::{print, println};
 
 /// An AllocList stores the size and status of the following sequence of bytes
 /// another AllocList can be expected at alloc_list.add(size) bytes later;
@@ -145,6 +148,32 @@ impl<const P: usize> BumpPointerAlloc<P> {
                 head = (head as *mut u8).add((*head).get_size()) as *mut AllocList;
             }
         }
+    }
+}
+
+impl<const P: usize> Debug for BumpPointerAlloc<P> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        unsafe {
+            let mut head = self.head as *mut AllocList;
+            let tail = self.tail as *mut AllocList;
+            while head < tail {
+                println!(f, "inspecting {:x}", head as *mut u8 as usize);
+                let this = head.as_ref().unwrap();
+                println!(
+                    f,
+                    "{:p}: Length = {:<10} Taken = {}",
+                    this,
+                    this.get_size(),
+                    this.is_taken()
+                );
+                let next = (head as *mut u8).add((*head).get_size());
+                println!(f, "checking next: {:x}", next as usize);
+                head = next as *mut AllocList;
+            }
+
+            println!(f, "done printing alloc table");
+        }
+        Ok(())
     }
 }
 
