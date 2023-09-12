@@ -1,8 +1,7 @@
+# entry point - set up machine and jump into rust code
+
 .option norvc
-
-
 .section .text.init
-
 
 .global _start
 _start:
@@ -19,16 +18,17 @@ _start:
 	csrw	satp, zero
 
 	# cores other than 0
-	# will park while we boot
+	# will init then park
+	# while we boot
 	csrr	t0, mhartid
-	bnez	t0, 3f
+	bnez	t0, 4f
 
 	# zero bss section
 	la 		a0, _bss_start
 	la		a1, _bss_end
 	bgeu	a0, a1, 2f
 
-1:
+1: 
 	sd		zero, (a0)
 	addi	a0, a0, 8
 	bltu	a0, a1, 1b
@@ -54,16 +54,16 @@ _start:
 
 	# set return pointer so we come back here
 	# when kinit returns 
-	la		ra, 2f
+	la		ra, 5f
 
 	# call kinit
 	mret
-2:
-	# again, set MPP to machine
-	# but also MIE and MPIE to 1
-	# to enable machine interrupts,
-	# before and after mret
-	li		t0, (11 << 11) | (1 << 7) | (1 << 5)
+3:
+	# set up mstatus for returning to rust
+	# set MPP to supervisor (11)
+	# set MPIE to enabled (7)
+	# set SPIE to enabled (5)
+	li		t0, (0b01 << 11) | (1 << 7) | (1 << 5)
 	csrw	mstatus, t0
 
 	# set machine trap vector
@@ -71,23 +71,49 @@ _start:
 	csrw	mtvec, t2
 
 	# setup MEPC to kmain as before
-	la		t1, kmain 
+	la		t1, kinit_hart 
 	csrw	mepc, t1
 
-	# enable external, timer, and software 
-	# interrupts only
-	li		t2, 0x888
-	csrw	mie, t2
+	# jump forward to park on return
+	#la		ra, 5f
+	mret
+
+# init other cores - address 124
+4: 
+	# give each hart a stack of 64kb
+	la		sp, _stack_end
+	li		t0, 0x10000
+	csrr	a0, mhartid
+	mul		t0, t0, a0
+	sub		sp, sp, t0
+
+	# MPP machine mode (11)
+	# MPIE enabled
+	# SPIE enabled 
+	li		t0, 0b11 << 11 | (1 << 7) | (1 <<  5)
+	csrw	mstatus, t0
+
+	# turn on MSIE (machine software interupt enable)
+	li		t3, (1 << 3)
+	csrw	mie, t3
+
+	# set exception pointer to rust hart init code
+	la		t1, kinit_hart
+	csrw	mepc, t1
+
+	# set up hart's trap vector
+	la		t2, asm_trap_vector
+	csrw	mtvec, t2
 
 	# set return pointer so we come back here
-	# when kmain returns 
-	la		ra, 3f
+	# when kinit_hart returns 
+	la		ra, 5f
 
-	# call kmain
+	# call kinit_hart
 	mret
 
 # initialize non-zero cores
 # and park
-3:
+5:
 	wfi
-	j		3b
+	j		5b
