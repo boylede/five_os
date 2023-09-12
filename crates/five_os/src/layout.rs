@@ -48,7 +48,8 @@ pub struct StaticLayout {
 impl StaticLayout {
     /// creates a stack-allocated structure with all
     /// of the addresses of areas in memory.
-    /// # Unsafe
+    ///
+    /// ## Safety
     /// Accessing a global defined outside rust is unsafe,
     /// therefor this function is also unsafe
     pub unsafe fn new() -> StaticLayout {

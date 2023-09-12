@@ -8,11 +8,6 @@ use fiveos_riscv::mmu::page_table::PAGE_SIZE;
 // todo: improve how we initialize these statics
 static mut KERNEL_PAGE_ALLOCATOR: PageAllocator<PAGE_SIZE> = PageAllocator::uninitalized();
 
-/// location of first page of memory after
-/// static kernel code, etc, and memory manager
-/// data structures
-static mut ALLOC_START: usize = 0;
-
 /// debug info about the memory manager init
 pub struct MemoryManagerInfo {
     bitmap_start: usize,
@@ -35,6 +30,11 @@ impl Debug for MemoryManagerInfo {
     }
 }
 
+
+/// Initialize page allocator
+/// 
+/// ## Safety
+/// This is expected to only run once, in kinit.
 pub unsafe fn init_allocator(
     layout: &StaticLayout,
 ) -> (&'static mut PageAllocator<PAGE_SIZE>, MemoryManagerInfo) {
@@ -47,7 +47,6 @@ pub unsafe fn init_allocator(
 
     let page_allocator = unsafe {
         KERNEL_PAGE_ALLOCATOR = page_allocator;
-        ALLOC_START = first_page;
         &mut KERNEL_PAGE_ALLOCATOR
     };
 

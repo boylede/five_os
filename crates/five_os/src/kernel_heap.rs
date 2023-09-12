@@ -19,7 +19,11 @@ pub struct HeapInfo {
     pub end: usize,
     pub size: usize,
 }
-
+/// Initialize the static global alloc for the kernel's use. 
+/// 
+/// ## Safety
+/// Accesses static mut, expected to only run once
+/// during kinit while other harts are parked
 pub unsafe fn init_kmem(page_allocator: &mut PageAllocator<PAGE_SIZE>) -> HeapInfo {
         // number of bytes to allocate for initial kernel heap
         let size = KMEM_SIZE * PAGE_SIZE;
@@ -37,6 +41,11 @@ pub unsafe fn init_kmem(page_allocator: &mut PageAllocator<PAGE_SIZE>) -> HeapIn
         HeapInfo { start, end, size }
 }
 
+/// Provides raw access to the kernel heap allocator. 
+/// Intended for use in debugging.
+/// 
+/// ## Safety
+/// Likely not safe in any context. 
 pub unsafe fn inspect_heap() -> &'static BumpPointerAlloc<PAGE_SIZE> {
     &KERNEL_HEAP
 }

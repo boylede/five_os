@@ -3,7 +3,6 @@
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
 extern crate alloc;
 use alloc::{boxed::Box, string::String, vec};
-use fiveos_allocator::page::PageAllocator;
 use core::{arch::asm, fmt::Write, ptr::null_mut};
 use fiveos_peripherals::{print, print_title, printhdr, println};
 
@@ -11,8 +10,7 @@ use five_os::{trap::TrapFrame, *};
 use fiveos_riscv::{
     cpu::registers::{
         misa::Misa,
-        mtvec,
-        raw::{asm_get_marchid, asm_get_mepc, asm_get_mimpid, asm_get_mvendorid},
+        raw::{asm_get_marchid, asm_get_mimpid, asm_get_mvendorid},
     },
     mmu::{
         page_table::{
@@ -68,7 +66,7 @@ extern "C" fn kinit() {
     /////////////////////////////////////////////////////////////////////////////////////////
     // Init Peripherals
     /////////////////////////////////////////////////////////////////////////////////////////
-    // safety: we only call this once
+    // Safety: we only call this once
     let Peripherals { mut uart } = unsafe { PERIPHERALS.take().unwrap_unchecked() };
     uart.init();
 
@@ -86,6 +84,7 @@ extern "C" fn kinit() {
     // Set up memory manager
     /////////////////////////////////////////////////////////////////////////////////////////
     // Setup the kernel's page table to keep track of allocations.
+    // Safety: We only call this once, in kinit.
     let (mut page_allocator, memory_manager_info) = unsafe { init_allocator(layout) };
     print!(uart, "{:?}", memory_manager_info);
     /////////////////////////////////////////////////////////////////////////////////////////
@@ -311,7 +310,7 @@ extern "C" fn kinit_hart() -> ! {
 }
 
 ////////////////////////////////////////////// todo: relocate below this line
-pub fn print_cpu_info(uart: &mut impl Write) {
+fn print_cpu_info(uart: &mut impl Write) {
     let vendor = unsafe { asm_get_mvendorid() };
     let architecture = unsafe { asm_get_marchid() };
     let implementation = unsafe { asm_get_mimpid() };
@@ -326,36 +325,7 @@ pub fn print_cpu_info(uart: &mut impl Write) {
     print_misa_info(uart);
 }
 
-pub fn print_trap_info(uart: &mut impl Write) {
-    let mepc = unsafe { asm_get_mepc() };
-    println!(uart, "mepc: {:x}", mepc);
-    let mtvec = unsafe { mtvec::read() };
-    println!(uart, "mtvec: {:x}", mtvec);
-}
-
-pub fn inspect_trap_vector(uart: &mut impl Write) {
-    printhdr!(uart, "Trap");
-    let mtvec = unsafe { mtvec::read() };
-    if mtvec == 0 {
-        println!(uart, "trap vector not initialized");
-        return;
-    }
-    println!(uart, "trap vector: {:x}", mtvec);
-    match mtvec & 0b11 {
-        0b00 => println!(uart, "Direct Mode"),
-        0b01 => println!(uart, "Vectored Mode"),
-        0b10 => println!(uart, "Reserved Value 2 Set"),
-        0b11 => println!(uart, "Reserved Value 3 Set"),
-        _ => unreachable!(),
-    };
-}
-
-pub fn print_page_table_untyped(uart: &mut impl Write, table: &PageTableUntyped) {
-    let descriptor = unsafe { get_global_descriptor() };
-    println!(uart, "{}", table.into_dynamic_typed(&descriptor));
-}
-
-pub fn print_misa_info(uart: &mut impl Write) {
+fn print_misa_info(uart: &mut impl Write) {
     printhdr!(uart, "Machine Instruction Set Architecture");
     let misa = Misa::get();
     let Some(misa) = misa else {
@@ -383,7 +353,7 @@ pub fn print_misa_info(uart: &mut impl Write) {
     }
 }
 
-pub fn layout_sanity_check(uart: &mut impl Write, l: &StaticLayout) {
+fn layout_sanity_check(uart: &mut impl Write, l: &StaticLayout) {
     print_title!(uart, "Static Layout Sanity Check");
     println!(
         uart,

@@ -31,8 +31,8 @@ pub unsafe fn set_low_bits(value: u8) {
 }
 
 #[inline]
-pub unsafe fn read() -> usize {
+pub fn read() -> usize {
     let out: usize;
-    asm!("csrr {tmp}, mtvec", tmp = out(reg) out);
+    unsafe {asm!("csrr {tmp}, mtvec", tmp = out(reg) out)};
     out
 }

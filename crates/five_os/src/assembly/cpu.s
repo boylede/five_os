@@ -30,16 +30,6 @@ asm_get_mstatus:
 asm_set_mstatus:
     csrw   mstatus, a0
     ret
-
-.global asm_get_mepc
-asm_get_mepc:
-    csrr   a0, mepc
-    ret
-.global asm_set_mepc
-asm_set_mepc:
-    csrw   mepc, a0
-    ret
-
 .global asm_get_satp
 asm_get_satp:
     csrr   a0, satp
