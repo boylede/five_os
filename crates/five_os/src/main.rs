@@ -2,63 +2,27 @@
 #![no_main]
 #![feature(panic_info_message, allocator_api, alloc_error_handler)]
 extern crate alloc;
+
 use alloc::{boxed::Box, string::String, vec};
-use core::{arch::asm, fmt::Write, ptr::null_mut};
-use fiveos_peripherals::{print, print_title, printhdr, println};
-
-use five_os::{trap::TrapFrame, *};
-use fiveos_riscv::{
-    cpu::registers::{
-        misa::Misa,
-        raw::{asm_get_marchid, asm_get_mimpid, asm_get_mvendorid},
-    },
-    mmu::{
-        page_table::{
-            descriptor::PageTableDescriptor, forty_eight::SV_FORTY_EIGHT,
-            thirty_nine::SV_THIRTY_NINE, thirty_two::SV_THIRTY_TWO, untyped::PageTableUntyped,
-            PAGE_SIZE,
-        },
-        set_translation_table, EntryFlags, TableTypes,
-    },
-};
-use fiveos_virtio::{
-    clint::{CLINT_BASE_ADDRESS, CLINT_END_ADDRESS},
-    plic::{PLIC, PLIC_BASE_ADDRESS, PLIC_END_ADDRESS},
-    uart::{Uart0, UART_BASE_ADDRESS, UART_END_ADDRESS},
-    Peripherals, PERIPHERALS,
-};
-
-use layout::StaticLayout;
+use core::{arch::asm, fmt::Write};
 
 use crate::{
-    kernel_heap::{init_kmem, HeapInfo, inspect_heap},
+    global_pages::init_global_pages,
+    kernel_heap::{init_kmem, inspect_heap},
+    layout::LinkerLayout,
     memory_manager::init_allocator,
 };
+use five_os::*;
+use fiveos_peripherals::{print, print_title, printhdr, println};
+use fiveos_riscv::cpu::registers::{
+    misa::Misa,
+    raw::{asm_get_marchid, asm_get_mimpid, asm_get_mvendorid},
+};
+use fiveos_virtio::{plic::PLIC, uart::Uart0, Peripherals, PERIPHERALS};
 
+mod global_pages;
 mod kernel_heap;
 mod memory_manager;
-
-/// MMU page table for kernel
-static mut KMEM_PAGE_TABLE: *mut PageTableUntyped = null_mut();
-
-/// Global that stores the type of the page table in use.
-/// Provided so software can support multiple types of page tables
-/// and pick between them depending on hardware support at runtime.
-static mut PAGE_TABLE_TYPE: TableTypes = TableTypes::Sv39;
-
-pub unsafe fn get_global_descriptor() -> &'static PageTableDescriptor {
-    match unsafe { PAGE_TABLE_TYPE } {
-        TableTypes::None => panic!("MMU not configured"),
-        TableTypes::Sv32 => &SV_THIRTY_TWO,
-        TableTypes::Sv39 => &SV_THIRTY_NINE,
-        TableTypes::Sv48 => &SV_FORTY_EIGHT,
-    }
-}
-
-#[alloc_error_handler]
-fn on_oom(_layout: core::alloc::Layout) -> ! {
-    panic!("OOM");
-}
 
 /// Our first entry point out of the assembly boot.s
 #[no_mangle]
@@ -66,7 +30,7 @@ extern "C" fn kinit() {
     /////////////////////////////////////////////////////////////////////////////////////////
     // Init Peripherals
     /////////////////////////////////////////////////////////////////////////////////////////
-    // Safety: we only call this once
+
     let Peripherals { mut uart } = unsafe { PERIPHERALS.take().unwrap_unchecked() };
     uart.init();
 
@@ -77,200 +41,58 @@ extern "C" fn kinit() {
     logo::print_logo(&mut uart);
     print_cpu_info(&mut uart);
 
-    let layout = StaticLayout::get();
-    layout_sanity_check(&mut uart, layout);
+    let layout = LinkerLayout::get();
+    layout_sanity_check(&mut uart, &layout);
 
     /////////////////////////////////////////////////////////////////////////////////////////
     // Set up memory manager
     /////////////////////////////////////////////////////////////////////////////////////////
-    // Setup the kernel's page table to keep track of allocations.
-    // Safety: We only call this once, in kinit.
-    let (mut page_allocator, memory_manager_info) = unsafe { init_allocator(layout) };
+
+    let (mut page_allocator, memory_manager_info) = unsafe { init_allocator(&layout) };
     print!(uart, "{:?}", memory_manager_info);
+
     /////////////////////////////////////////////////////////////////////////////////////////
     // Set up trap stack & print
     /////////////////////////////////////////////////////////////////////////////////////////
-    // allocate some space to store a stack for the trap
+
     let trap_stack = page_allocator
         .zalloc(1)
         .expect("failed to initialize trap stack") as *mut u8 as usize;
 
     /////////////////////////////////////////////////////////////////////////////////////////
-    // Hard-coded info about kernel's memory use
-    /////////////////////////////////////////////////////////////////////////////////////////
-    let mut kernel_memory_map: [(&str, usize, usize, EntryFlags); 16] = [
-        // dynamic entry for kernel page table
-        ("", 0, 0, EntryFlags::READ),
-        // dynamic entry for further kernel pages
-        ("", 0, 0, EntryFlags::READ),
-        (
-            "Allocation Bitmap",
-            layout.heap_start,
-            layout.heap_start + (layout.heap_size / PAGE_SIZE),
-            EntryFlags::READ_EXECUTE,
-        ),
-        (
-            "Kernel Code Section",
-            layout.text_start,
-            layout.text_end,
-            EntryFlags::READ_EXECUTE,
-        ),
-        (
-            "Readonly Data Section",
-            layout.rodata_start,
-            layout.rodata_end,
-            EntryFlags::READ_EXECUTE,
-        ),
-        (
-            "Data Section",
-            layout.data_start,
-            layout.data_end,
-            EntryFlags::READ_WRITE,
-        ),
-        (
-            "BSS section",
-            layout.bss_start,
-            layout.bss_end,
-            EntryFlags::READ_WRITE,
-        ),
-        (
-            "Kernel Stack",
-            layout.stack_start,
-            layout.stack_end,
-            EntryFlags::READ_WRITE,
-        ),
-        (
-            "Hardware UART",
-            UART_BASE_ADDRESS,
-            UART_END_ADDRESS,
-            EntryFlags::READ_WRITE,
-        ),
-        (
-            "Hardware CLINT, MSIP",
-            CLINT_BASE_ADDRESS,
-            CLINT_END_ADDRESS,
-            EntryFlags::READ_WRITE,
-        ),
-        (
-            "Hardware PLIC",
-            PLIC_BASE_ADDRESS,
-            PLIC_END_ADDRESS,
-            EntryFlags::READ_WRITE,
-        ),
-        (
-            "Hardware ????",
-            0x0c20_0000,
-            0x0c20_8000,
-            EntryFlags::READ_WRITE,
-        ),
-        (
-            "Trap stack",
-            trap_stack,
-            trap_stack + PAGE_SIZE,
-            EntryFlags::READ_WRITE,
-        ),
-        // unused entries
-        ("", 0, 0, EntryFlags::READ),
-        ("", 0, 0, EntryFlags::READ),
-        ("", 0, 0, EntryFlags::READ),
-    ];
-
-    /////////////////////////////////////////////////////////////////////////////////////////
     // init kernel heap
     /////////////////////////////////////////////////////////////////////////////////////////
 
-    // allocate pages for kernel memory, initialize bumplist/skiplist allocator
-    // allocate page for kernel's page table
-    let kernel_heap_info = unsafe {init_kmem(&mut page_allocator)};
+    let kernel_heap_info = unsafe { init_kmem(&mut page_allocator) };
 
     /////////////////////////////////////////////////////////////////////////////////////////
     // init kernel page table for entry to S-mode & enabled virtual memory
     /////////////////////////////////////////////////////////////////////////////////////////
-    let kernel_page_table = unsafe {
-        let kpt = page_allocator.zalloc(1).unwrap() as *mut PageTableUntyped;
-        let kpt_int = kpt as *const usize as usize;
-        KMEM_PAGE_TABLE = kpt;
-        kpt_int
-    };
+
+    let kernel_memory_map =
+        unsafe { init_global_pages(&layout, page_allocator, trap_stack, kernel_heap_info) };
+
+    print!(uart, "{:?}", kernel_memory_map);
 
     /////////////////////////////////////////////////////////////////////////////////////////
-    // add kernel dynamic memory info to memory map
+    // Debug print page allocator
     /////////////////////////////////////////////////////////////////////////////////////////
-    {
-        let kpt = kernel_page_table;
-        kernel_memory_map[0] = ("Kernel Root Page Table", kpt, kpt, EntryFlags::READ_WRITE);
-    }
-    {
-        let HeapInfo { start, end, .. } = kernel_heap_info;
-        kernel_memory_map[1] = ("Kernel Dynamic Memory", start, end, EntryFlags::READ_WRITE);
-    }
-
-    let kernel_page_table = unsafe { KMEM_PAGE_TABLE.as_mut().unwrap() };
-    if !set_translation_table(TableTypes::Sv39, kernel_page_table) {
-        panic!("address translation not supported on this processor.");
-    }
-
-    // set up mmu satp value; todo: do this elsewhere / via zst interface
-    let root_ppn = (kernel_page_table as *const _ as usize) >> 12;
-    let satp_val = 8 << 60 | root_ppn;
-    let descriptor = unsafe { get_global_descriptor() };
-    let mut kernel_zalloc =
-        |count: usize| -> Option<*mut u8> { page_allocator.zalloc(count).map(|p| p as *mut u8) };
-    {
-        // reserve some space for trap frames
-        // and put the address in mscratch
-        // (and sscratch)
-        // to be used in trap.s
-
-        // get a page for the trap stack frame
-
-        let global_trapframe_address = unsafe {
-            let frame: &mut TrapFrame = &mut trap::GLOBAL_TRAPFRAMES[0];
-            frame.satp = satp_val;
-            frame.trap_stack = (trap_stack + PAGE_SIZE) as *mut _;
-            let global_trapframe_address = frame as *mut TrapFrame as usize;
-
-            asm!("csrw mscratch, {}", in(reg) global_trapframe_address);
-            asm!("csrw sscratch, {}", in(reg) global_trapframe_address);
-            global_trapframe_address
-        };
-
-        kernel_page_table.identity_map(
-            descriptor,
-            global_trapframe_address,
-            global_trapframe_address + PAGE_SIZE,
-            EntryFlags::READ_WRITE,
-            &mut kernel_zalloc,
-        );
-    }
-
-    print_title!(uart, "Kernel Space Identity Map");
-
-    for (msg, start, end, flags) in kernel_memory_map {
-        if msg.len() > 0 {
-            println!(uart, "{}: 0x{:x}-0x{:x} {:?}", msg, start, end, flags);
-            kernel_page_table.identity_map(descriptor, start, end, flags, &mut kernel_zalloc);
-        }
-    }
 
     print!(uart, "{:?}", page_allocator);
 
-    test_allocations(&mut uart);
-    unsafe {
-        asm!("csrw satp, {}", in(reg) satp_val);
-        asm!("sfence.vma zero, {}", in(reg)0);
-    }
-}
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // Test global alloc
+    /////////////////////////////////////////////////////////////////////////////////////////
 
-#[no_mangle]
-extern "C" fn kmain() {
-    // Safety, this function doesn't get called, will be deleted
-    let mut uart = unsafe { Uart0::new() };
-    println!(uart, "entered KMAIN");
-    loop {
-        unsafe {
-            asm!("wfi");
-        }
+    test_allocations(&mut uart);
+
+    /////////////////////////////////////////////////////////////////////////////////////////
+    // ensure all items above are set before returning,
+    // note: per internet, may not be best/proper way
+    /////////////////////////////////////////////////////////////////////////////////////////
+
+    unsafe {
+        asm!("sfence.vma zero, {}", in(reg)0);
     }
 }
 
@@ -288,14 +110,14 @@ fn test_allocations(uart: &mut impl Write) {
         let sparkle_heart = String::from_utf8(sparkle_heart).unwrap();
         println!(uart, "String = {}", sparkle_heart);
         println!(uart, "\n\nAllocations of a box, vector, and string");
-        
-        print!(uart, "{:?}", unsafe {inspect_heap()});
-        
+
+        print!(uart, "{:?}", unsafe { inspect_heap() });
+
         println!(uart, "test");
     }
     println!(uart, "test 2");
     println!(uart, "\n\nEverything should now be free:");
-    print!(uart, "{:?}", unsafe {inspect_heap()});
+    print!(uart, "{:?}", unsafe { inspect_heap() });
 
     printhdr!(uart, "reached end, looping");
     loop {}
@@ -303,7 +125,6 @@ fn test_allocations(uart: &mut impl Write) {
 
 #[no_mangle]
 extern "C" fn kinit_hart() -> ! {
-    // println!("entering hart kinit");
     loop {
         unsafe { asm!("wfi") };
     }
@@ -353,7 +174,7 @@ fn print_misa_info(uart: &mut impl Write) {
     }
 }
 
-fn layout_sanity_check(uart: &mut impl Write, l: &StaticLayout) {
+fn layout_sanity_check(uart: &mut impl Write, l: &LinkerLayout) {
     print_title!(uart, "Static Layout Sanity Check");
     println!(
         uart,
