@@ -18,7 +18,7 @@ use fiveos_riscv::cpu::registers::{
     misa::Misa,
     raw::{asm_get_marchid, asm_get_mimpid, asm_get_mvendorid},
 };
-use fiveos_virtio::{plic::PLIC, uart::Uart0, Peripherals, PERIPHERALS};
+use fiveos_virtio::{plic::PLIC, Peripherals, PERIPHERALS};
 
 mod global_pages;
 mod kernel_heap;
@@ -42,7 +42,7 @@ extern "C" fn kinit() {
     print_cpu_info(&mut uart);
 
     let layout = LinkerLayout::get();
-    layout_sanity_check(&mut uart, &layout);
+    print!(uart, "{:?}", layout);
 
     /////////////////////////////////////////////////////////////////////////////////////////
     // Set up memory manager
@@ -174,50 +174,3 @@ fn print_misa_info(uart: &mut impl Write) {
     }
 }
 
-fn layout_sanity_check(uart: &mut impl Write, l: &LinkerLayout) {
-    print_title!(uart, "Static Layout Sanity Check");
-    println!(
-        uart,
-        "text:\t{:x} - {:x}\t{}-bytes",
-        l.text_start,
-        l.text_end,
-        l.text_end - l.text_start
-    );
-    println!(uart, " trap:\t{:x} - {:x}??", l.trap_start, l.text_end);
-    println!(uart, "global:\t{:x}", l.global_pointer);
-    println!(
-        uart,
-        "rodata:\t{:x} - {:x}\t{}-bytes",
-        l.rodata_start,
-        l.rodata_end,
-        l.rodata_end - l.rodata_start
-    );
-    println!(
-        uart,
-        "data:\t{:x} - {:x}\t{}-bytes",
-        l.data_start,
-        l.data_end,
-        l.data_end - l.data_start
-    );
-    println!(
-        uart,
-        "bss:\t{:x} - {:x}\t{}-bytes",
-        l.bss_start,
-        l.bss_end,
-        l.bss_end - l.bss_start
-    );
-    println!(
-        uart,
-        " stack:\t{:x} - {:x}\t{}-bytes",
-        l.stack_start,
-        l.stack_end,
-        l.stack_end - l.stack_start
-    );
-    println!(
-        uart,
-        " heap:\t{:x} - {:x}\t{}-bytes",
-        l.heap_start,
-        l.heap_start + l.heap_size,
-        l.heap_size
-    );
-}

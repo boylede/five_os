@@ -1,3 +1,7 @@
+use core::fmt::Debug;
+
+use fiveos_peripherals::{print, print_title, println};
+
 extern "C" {
     static _text_start: usize;
     static _trap_start: usize;
@@ -75,5 +79,56 @@ impl LinkerLayout {
     /// Provides the layout
     pub fn get() -> LinkerLayout {
         LinkerLayout::new()
+    }
+}
+
+impl Debug for LinkerLayout {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        print_title!(f, "Static Layout Sanity Check");
+        println!(
+            f,
+            "text:\t{:x} - {:x}\t{}-bytes",
+            self.text_start,
+            self.text_end,
+            self.text_end - self.text_start
+        );
+        println!(f, " trap:\t{:x} - {:x}??", self.trap_start, self.text_end);
+        println!(f, "global:\t{:x}", self.global_pointer);
+        println!(
+            f,
+            "rodata:\t{:x} - {:x}\t{}-bytes",
+            self.rodata_start,
+            self.rodata_end,
+            self.rodata_end - self.rodata_start
+        );
+        println!(
+            f,
+            "data:\t{:x} - {:x}\t{}-bytes",
+            self.data_start,
+            self.data_end,
+            self.data_end - self.data_start
+        );
+        println!(
+            f,
+            "bss:\t{:x} - {:x}\t{}-bytes",
+            self.bss_start,
+            self.bss_end,
+            self.bss_end - self.bss_start
+        );
+        println!(
+            f,
+            " stack:\t{:x} - {:x}\t{}-bytes",
+            self.stack_start,
+            self.stack_end,
+            self.stack_end - self.stack_start
+        );
+        println!(
+            f,
+            " heap:\t{:x} - {:x}\t{}-bytes",
+            self.heap_start,
+            self.heap_start + self.heap_size,
+            self.heap_size
+        );
+        Ok(())
     }
 }
