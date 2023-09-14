@@ -1,14 +1,4 @@
-/// describes the structure of a page table, for use in generic functions that may want to walk
-/// page tables or create them, either with monomorphized generics or through
-/// a PageTableDescriptor input at runtime
-pub trait PageTableKind {
-    fn size(&self) -> usize;
-    fn depth(&self) -> usize;
-    fn entry_size(&self) -> usize;
-    fn entry_segments(&self) -> &[BitGroup];
-    fn physical_segments(&self) -> &[BitGroup];
-    fn virtual_segments(&self) -> &[BitGroup];
-}
+use super::PageTableKind;
 
 pub struct PageTableDescriptor {
     /// the size of the page table, in bytes (always 4096)
@@ -34,32 +24,36 @@ impl PageTableDescriptor {
     }
 }
 
-impl PageTableKind for PageTableDescriptor {
-    fn size(&self) -> usize {
-        self.size
-    }
-    fn depth(&self) -> usize {
-        self.levels
-    }
-    fn entry_size(&self) -> usize {
-        self.entry_size
-    }
-    fn entry_segments(&self) -> &[BitGroup] {
-        self.page_segments
-    }
-    fn physical_segments(&self) -> &[BitGroup] {
-        self.physical_segments
-    }
-    fn virtual_segments(&self) -> &[BitGroup] {
-        self.virtual_segments
-    }
-}
+// #[derive(Debug)]
+// pub struct DescribedEntry(u8);
+
+// impl PageTableKind for PageTableDescriptor {
+//     type Entry = DescribedEntry;
+//     fn size(&self) -> usize {
+//         self.size
+//     }
+//     fn depth(&self) -> usize {
+//         self.levels
+//     }
+//     fn entry_size(&self) -> usize {
+//         self.entry_size
+//     }
+//     fn entry_segments(&self) -> &[BitGroup] {
+//         self.page_segments
+//     }
+//     fn physical_segments(&self) -> &[BitGroup] {
+//         self.physical_segments
+//     }
+//     fn virtual_segments(&self) -> &[BitGroup] {
+//         self.virtual_segments
+//     }
+// }
 
 /// A (size, offset) where size is # of bits and offset is
 /// the bit address of the lowest bit in the group.
 pub type BitGroup = (usize, usize);
 
-fn collapse(segments: &[BitGroup]) -> BitGroup {
+pub fn collapse(segments: &[BitGroup]) -> BitGroup {
     let size = segments.iter().map(|(bits, _)| *bits).sum();
     (size, segments[0].1)
 }

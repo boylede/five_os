@@ -1,7 +1,5 @@
 use crate::cpu::registers::satp::Satp;
 
-use self::page_table::descriptor::PageTableDescriptor;
-use self::page_table::untyped::PageTableUntyped;
 use self::page_table::{PAGE_ADDR_MAGNITIDE, PAGE_SIZE};
 
 pub use entry::EntryFlags;
@@ -31,12 +29,17 @@ pub enum TableTypes {
 #[repr(align(4096))]
 pub struct Page(pub [u8; PAGE_SIZE]);
 
+/// Different page size options
 #[repr(u8)]
 #[derive(Clone, Copy)]
 pub enum PageSize {
+    /// 4096 byte page
     Page = 0,
+    /// 1 million byte page
     Megapage = 1,
+    /// 1 billion byte page
     GigaPage = 2,
+    /// 1 trillion byte page
     TeraPage = 3,
 }
 
@@ -51,9 +54,8 @@ impl PageSize {
 /// translation if none is supported by processor.
 /// sets the satp register to the given address.
 /// does not turn on address translation
-pub fn set_translation_table(mode: TableTypes, address: &mut PageTableUntyped) -> bool {
+pub fn set_translation_table(mode: TableTypes, address: usize) -> bool {
     let mode = mode as u8;
-    let address = { address as *mut _ } as usize;
     let desired = Satp::from(address, mode);
 
     let found = unsafe {

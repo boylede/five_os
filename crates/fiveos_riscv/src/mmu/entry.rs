@@ -2,28 +2,16 @@ use core::fmt::Debug;
 
 use super::page_table::forty_eight::Entry;
 
-/// testing out a trait-based interface to the page table entries
-pub trait PTEntryRead {
-    /// copy the flags out of the entry for inspection
-    fn extract_flags(&self) -> EntryFlags;
-    /// returns a 32-bit address, if appropriate for table type
-    fn address_limited(&self) -> Option<u32>;
-    /// returns 32-bit address segment
-    fn extract_segment_limited(&self, level: usize) -> u32;
-    /// returns the address in 64 bits
-    fn address(&self) -> u64;
-    fn extract_extended_flags(&self) -> ExtendedFlags;
+pub trait PTEntry {
+    fn read_flags(&self) -> EntryFlags;
+    fn read_address(&self) -> u64;
+    fn read_extended_flags(&self) -> ExtendedFlags;
     fn extract_segment(&self, level: usize) -> u64;
-}
-
-/// testing out a trait-based interface to the page table entries
-pub trait PTEntryWrite {
-    /// overwrite the flags with the ones provided
-    fn write_flags(&mut self, flags: EntryFlags);
-    fn invalidate(&mut self);
-    fn write_address(&mut self, address: u64);
-    /// returns the address in 64 bits
-    fn write_extended_flags(&mut self) -> ExtendedFlags;
+    fn load(&self) -> u64;
+    // returns true if the write succeeds
+    fn write(&self, old_value: u64, address: u64, flags: EntryFlags) -> bool;
+    // returns true if the write succeeds
+    fn invalidate(&self, old_value: u64) -> bool;
 }
 
 /// unimplemented boilerplate for the top 10 bits in larger page table entries

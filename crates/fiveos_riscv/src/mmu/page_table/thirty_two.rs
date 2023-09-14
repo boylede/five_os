@@ -1,4 +1,11 @@
-use super::descriptor::{BitGroup, PageTableDescriptor, PageTableKind};
+use core::sync::atomic::AtomicU32;
+
+use crate::mmu::entry::PTEntry;
+
+use super::{
+    descriptor::{BitGroup, PageTableDescriptor},
+    PageTableKind,
+};
 
 pub const SV_THIRTY_TWO: PageTableDescriptor = PageTableDescriptor {
     size: PAGESIZE,
@@ -32,9 +39,11 @@ const PPN_SEGMENTS: [BitGroup; LEVELS] = [(10, 10), (12, 20)];
 const PA_SEGMENTS: [BitGroup; LEVELS] = [(10, 12), (12, 22)];
 
 /// ZST to tag Sv32-type page tables
+#[derive(Debug, Clone, Copy)]
 pub struct Sv32;
 
 impl PageTableKind for Sv32 {
+    type Entry = Entry;
     fn size(&self) -> usize {
         PAGESIZE
     }
@@ -57,5 +66,42 @@ impl PageTableKind for Sv32 {
 
     fn virtual_segments(&self) -> &[BitGroup] {
         &VPN_SEGMENTS
+    }
+}
+
+/// Sv32 Page Table Entry
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct Entry(AtomicU32);
+
+impl Entry {}
+
+impl PTEntry for Entry {
+    fn read_flags(&self) -> crate::mmu::EntryFlags {
+        todo!()
+    }
+
+    fn read_address(&self) -> u64 {
+        todo!()
+    }
+
+    fn read_extended_flags(&self) -> crate::mmu::entry::ExtendedFlags {
+        todo!()
+    }
+
+    fn extract_segment(&self, level: usize) -> u64 {
+        todo!()
+    }
+
+    fn load(&self) -> u64 {
+        todo!()
+    }
+
+    fn write(&self, old_value: u64, address: u64, flags: crate::mmu::EntryFlags) -> bool {
+        todo!()
+    }
+
+    fn invalidate(&self, old_value: u64) -> bool {
+        todo!()
     }
 }

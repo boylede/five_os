@@ -1,4 +1,11 @@
-use super::descriptor::{BitGroup, PageTableDescriptor, PageTableKind};
+use core::sync::atomic::{AtomicU64, Ordering};
+
+use crate::mmu::{entry::PTEntry, EntryFlags};
+
+use super::{
+    descriptor::{BitGroup, PageTableDescriptor},
+    PageTableKind,
+};
 
 pub const SV_THIRTY_NINE: PageTableDescriptor = PageTableDescriptor {
     size: PAGESIZE,
@@ -33,9 +40,11 @@ const PA_SEGMENTS: [BitGroup; LEVELS] = [(9, 12), (9, 21), (26, 30)];
 // const FULL_PPN: BitGroup = (44, 10);
 
 /// ZST to tag Sv39-type page tables
+#[derive(Debug, Clone, Copy)]
 pub struct Sv39;
 
 impl PageTableKind for Sv39 {
+    type Entry = Entry;
     fn size(&self) -> usize {
         PAGESIZE
     }
@@ -58,5 +67,63 @@ impl PageTableKind for Sv39 {
 
     fn virtual_segments(&self) -> &[BitGroup] {
         &VPN_SEGMENTS
+    }
+}
+
+/// Sv39 Page Table Entry
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct Entry(AtomicU64);
+
+impl Entry {}
+impl PTEntry for Entry {
+    fn read_flags(&self) -> EntryFlags {
+        let value = self.0.load(Ordering::Relaxed);
+        EntryFlags::from_u16((value & (1 << 10) - 1) as u16)
+    }
+
+    fn read_address(&self) -> u64 {
+        let entry = self.load();
+        let mut address = 0;
+        for level in 0..LEVELS {
+            let (bit_width, offset) = PPN_SEGMENTS[level];
+            let mask = ((1 << bit_width) - 1) << offset;
+            address = (entry & mask) >> offset;
+        }
+        let address = address << 12;
+        // let mut uart = unsafe {Uart0::new()};
+        // println!(uart, "extracted address {:x}", address);
+        address
+    }
+
+    fn read_extended_flags(&self) -> crate::mmu::entry::ExtendedFlags {
+        todo!()
+    }
+
+    fn extract_segment(&self, level: usize) -> u64 {
+        todo!()
+    }
+
+    fn load(&self) -> u64 {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    fn write(&self, old_value: u64, address: u64, flags: EntryFlags) -> bool {
+        let address = address >> 12;
+        let mut bits = 0;
+        for level in 0..LEVELS {
+            let (bit_width, offset) = PPN_SEGMENTS[level];
+            let mask = ((1 << bit_width) - 1) << offset;
+            bits = (address << offset) & mask;
+        }
+        let new_value = flags.as_u16() as u64 | bits as u64;
+
+        self.0
+            .compare_exchange(old_value, new_value, Ordering::Release, Ordering::Relaxed)
+            .is_ok()
+    }
+
+    fn invalidate(&self, old_value: u64) -> bool {
+        todo!()
     }
 }

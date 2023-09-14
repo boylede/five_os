@@ -1,30 +1,31 @@
-use crate::mmu::entry::PTEntryRead;
+use core::fmt::Display;
 
-use super::{
-    descriptor::PageTableDescriptor,
-    untyped::{PageTableDynamicTyped, PageTableUntyped},
-};
+use crate::mmu::entry::PTEntry;
 
-impl<'a, 'b> core::fmt::Display for PageTableDynamicTyped<'a, 'b> {
+use super::{PageTable, PageTableKind};
+
+impl<K> Display for PageTable<K>
+where
+    K: PageTableKind + core::fmt::Debug + Copy,
+{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let PageTableDynamicTyped(table, descriptor) = *self;
-        let base_address = todo!();
-        let descent = todo!();
-        inner_print_map(f, table, descriptor, base_address, descent);
+        inner(self, 0, 0, f);
         Ok(())
     }
 }
 
-fn inner_print_map(
-    f: &mut core::fmt::Formatter<'_>,
-    table: &PageTableUntyped,
-    descriptor: &PageTableDescriptor,
+fn inner<K>(
+    this: &PageTable<K>,
     base_address: usize,
     descent: usize,
-) {
-    let max_bits = descriptor.virtual_address_size();
-    let bits_known: usize = descriptor
-        .virtual_segments
+    f: &mut core::fmt::Formatter<'_>,
+) where
+    K: PageTableKind + core::fmt::Debug + Copy,
+{
+    let max_bits = this.kind.virtual_address_size();
+    let bits_known: usize = this
+        .kind
+        .virtual_segments()
         .iter()
         .take(descent + 1)
         .map(|(bits, _)| *bits)
@@ -34,13 +35,15 @@ fn inner_print_map(
     write!(
         f,
         "Reading pagetable located at 0x{:x}:",
-        table as *const PageTableUntyped as usize
-    );
+        this as *const _ as usize
+    )
+    .unwrap();
 
-    for index in 0..descriptor.size / descriptor.entry_size {
+    for index in 0..this.kind.size() / this.kind.entry_size() {
         let resulting_address = base_address + (index * page_size);
-        let entry = (table.entry(index, descriptor.entry_size), descriptor);
-        if entry.extract_flags().is_valid() {
+        let entry = this.entry(index);
+        let flags = entry.read_flags();
+        if flags.is_valid() {
             write!(
                 f,
                 "{}-{}: 0x{:x}-0x{:x}: {:?}",
@@ -48,14 +51,15 @@ fn inner_print_map(
                 index,
                 resulting_address,
                 resulting_address + page_size - 1,
-                entry.0
-            );
+                entry
+            )
+            .unwrap();
 
-            if entry.extract_flags().is_branch() {
-                let next = entry.address();
-                let next_table = unsafe { (next as *const PageTableUntyped).as_ref().unwrap() };
+            if flags.is_branch() {
+                let next = entry.read_address();
+                let next_table = unsafe { (next as *const PageTable<K>).as_ref().unwrap() };
 
-                inner_print_map(f, next_table, descriptor, resulting_address, descent + 1);
+                inner(next_table, resulting_address, descent + 1, f);
             }
         }
     }

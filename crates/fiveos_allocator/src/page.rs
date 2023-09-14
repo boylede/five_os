@@ -2,9 +2,13 @@ use core::assert;
 use core::fmt::Debug;
 use core::mem::size_of;
 
-pub mod bitmap;
 use bitmap::PageMarker;
 use fiveos_peripherals::{print, print_title, printhdr, println};
+
+use self::info::PageAllocatorInfo;
+
+pub mod bitmap;
+pub mod info;
 
 pub struct PageContents(core::sync::atomic::AtomicU8);
 
@@ -31,9 +35,21 @@ impl<const A: usize> PageAllocator<A> {
         this.clear_bitmap();
         this
     }
-    /// Provides the head and tail for debug purposes
-    pub fn info(&self) -> (usize, usize) {
-        (self.head, self.tail)
+    pub fn info(&self) -> PageAllocatorInfo {
+        let bitmap_start = self.head;
+        let count = self.page_count();
+        let bitmap_end = bitmap_start + count * core::mem::size_of::<PageMarker>();
+        let first_page = align_to(bitmap_end, A);
+        let end = self.tail;
+        let size = A;
+        PageAllocatorInfo {
+            bitmap_start,
+            bitmap_end,
+            first_page,
+            end,
+            count,
+            size,
+        }
     }
     fn clear_bitmap(&mut self) {
         for entry in self.bitmap_mut().iter_mut() {

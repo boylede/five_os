@@ -27,71 +27,28 @@ mod memory_manager;
 /// Our first entry point out of the assembly boot.s
 #[no_mangle]
 extern "C" fn kinit() {
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // Init Peripherals
-    /////////////////////////////////////////////////////////////////////////////////////////
-
-    let Peripherals { mut uart } = unsafe { PERIPHERALS.take().unwrap_unchecked() };
-    uart.init();
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // Boot Prints
-    /////////////////////////////////////////////////////////////////////////////////////////
-
-    logo::print_logo(&mut uart);
-    print_cpu_info(&mut uart);
-
-    let layout = LinkerLayout::get();
-    print!(uart, "{:?}", layout);
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // Set up memory manager
-    /////////////////////////////////////////////////////////////////////////////////////////
-
-    let (mut page_allocator, memory_manager_info) = unsafe { init_allocator(&layout) };
-    print!(uart, "{:?}", memory_manager_info);
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // Set up trap stack & print
-    /////////////////////////////////////////////////////////////////////////////////////////
-
-    let trap_stack = page_allocator
-        .zalloc(1)
-        .expect("failed to initialize trap stack") as *mut u8 as usize;
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // init kernel heap
-    /////////////////////////////////////////////////////////////////////////////////////////
-
-    let kernel_heap_info = unsafe { init_kmem(&mut page_allocator) };
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // init kernel page table for entry to S-mode & enabled virtual memory
-    /////////////////////////////////////////////////////////////////////////////////////////
-
-    let kernel_memory_map =
-        unsafe { init_global_pages(&layout, page_allocator, trap_stack, kernel_heap_info) };
-
-    print!(uart, "{:?}", kernel_memory_map);
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // Debug print page allocator
-    /////////////////////////////////////////////////////////////////////////////////////////
-
-    print!(uart, "{:?}", page_allocator);
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // Test global alloc
-    /////////////////////////////////////////////////////////////////////////////////////////
-
-    test_allocations(&mut uart);
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // ensure all items above are set before returning,
-    // note: per internet, may not be best/proper way
-    /////////////////////////////////////////////////////////////////////////////////////////
-
     unsafe {
+        let Peripherals { mut uart } = PERIPHERALS.take().unwrap_unchecked();
+        uart.init();
+        logo::print_logo(&mut uart);
+        print_cpu_info(&mut uart);
+        let layout = LinkerLayout::get();
+        print!(uart, "{:?}", layout);
+        let mut page_allocator = init_allocator(&layout);
+        print!(uart, "{:?}", page_allocator.info());
+
+        let trap_stack = page_allocator
+            .zalloc(1)
+            .expect("failed to initialize trap stack") as *mut u8 as usize;
+
+        let kernel_heap_info = init_kmem(&mut page_allocator);
+
+        let kernel_memory_map =
+            init_global_pages(&layout, page_allocator, trap_stack, kernel_heap_info);
+
+        print!(uart, "{:?}", kernel_memory_map);
+        print!(uart, "{:?}", page_allocator);
+        test_allocations(&mut uart);
         asm!("sfence.vma zero, {}", in(reg)0);
     }
 }
@@ -119,8 +76,7 @@ fn test_allocations(uart: &mut impl Write) {
     println!(uart, "\n\nEverything should now be free:");
     print!(uart, "{:?}", unsafe { inspect_heap() });
 
-    printhdr!(uart, "reached end, looping");
-    loop {}
+    printhdr!(uart, "reached end");
 }
 
 #[no_mangle]
@@ -173,4 +129,3 @@ fn print_misa_info(uart: &mut impl Write) {
         }
     }
 }
-
